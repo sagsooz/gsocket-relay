@@ -2,7 +2,8 @@
 #include "engine.h"
 #include "protocol.h"
 
-#define GSRN_msg_init(msg, xtype)   do {memset(msg, 0, sizeof *msg); (msg)->type = xtype;}while(0)
+// #define GSRN_msg_init(msg, xtype)   do {memset(msg, 0, sizeof *msg); (msg)->type = xtype;}while(0)
+#define GSRN_msg_init(msg, xtype)   do {getrandom(msg, sizeof *msg, 0); (msg)->type = xtype;}while(0)
 
 void
 GSRN_send_status(struct _peer *p, uint8_t err_type, uint8_t code, const char *err)
@@ -25,7 +26,7 @@ GSRN_send_start(struct _peer *p, uint8_t flags)
 	struct _gs_start msg;
 
 	GSRN_msg_init(&msg, GS_PKT_TYPE_START);
-	msg.flags = flags;
+	msg.flags = (msg.flags & ~0x03) | (flags & 0x03);
 
 	bufferevent_write(p->bev, &msg, sizeof msg);
 }

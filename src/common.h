@@ -13,6 +13,7 @@
 #include <sys/ioctl.h>
 #include <sys/resource.h>
 #include <sys/queue.h>
+#include <sys/random.h>
 #ifdef HAVE_SYS_LOADAVG_H
 # include <sys/loadavg.h> // Solaris11
 #endif
