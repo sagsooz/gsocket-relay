@@ -1,10 +1,12 @@
-# Global Socket Relay
+# BH Socket Relay
 
-[YOU ARE LIKELY WRONG HERE. YOU WANT TO GO TO https://www.github.com/hackerschoice/gsocket.](https://www.github.com/hackerschoice/gsocket)
+BH Socket Relay is the private relay deployment for `bhsocket.io`.
 
-This repository is the Global Socket Relay. There is rarely the need for you to run a Global Socket Relay. *YOU CAN RUN GSOCKET WITHOUT RUNNING A RELAY*.
+This fork keeps the upstream Global Socket relay protocol compatible, while branding and deployment defaults are adjusted for BH Socket infrastructure.
 
-**[CLICK HERE TO USE GSOCKET.](https://www.github.com/hackerschoice/gsocket)**  
+Upstream projects:
 
-This repository is mostly for code review only. If you are sure you are at the right location then [click here to continue](README2.md).
-(We do encourage your opinion and encourage you to contribute. We are friendly to all opinions. Join us on Telegram).
+- Relay: https://github.com/hackerschoice/gsocket-relay
+- Client/toolkit: https://github.com/hackerschoice/gsocket
+
+See [README2.md](README2.md) for build, install, and test notes.

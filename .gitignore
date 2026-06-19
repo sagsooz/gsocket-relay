@@ -1,0 +1,22 @@
+# Autotools generated files
+/Makefile
+/Makefile.in
+/aclocal.m4
+/autom4te.cache/
+/config/
+/config.h
+/config.h.in
+/config.log
+/config.status
+/configure
+/stamp-h1
+/src/.deps/
+/src/Makefile
+/src/Makefile.in
+/src/*.o
+/src/gsrnd
+/src/gsrn_cli
+/admin/bhrelay-admin
+
+# Local build dependency checkout
+/gsocket/

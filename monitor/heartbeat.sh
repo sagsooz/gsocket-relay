@@ -21,7 +21,7 @@ command -v gdate >/dev/null && date(){ gdate "$@"; }
 	MYNAME=${MYNAME%%.*}
 }
 
-[ -z "$DOMAIN" ] && DOMAIN=thc.org
+[ -z "$DOMAIN" ] && DOMAIN=bhsocket.io
 
 waitkp()
 {
@@ -49,7 +49,7 @@ tg_msg()
 	local str
 	[[ -z "$TG_TOKEN" ]] && return
 
-	str=$(curl -fLSs --retry 3 --max-time 15 --data-urlencode "text=\[$(date '+%F %T' -u)]\[${MYNAME:-GS}] $*" "https://api.telegram.org/bot${TG_TOKEN}/sendMessage?chat_id=${TG_CHATID}&parse_mode=Markdown" | jq '.ok')
+	str=$(curl -fLSs --retry 3 --max-time 15 --data-urlencode "text=\[$(date '+%F %T' -u)]\[${MYNAME:-BH}] $*" "https://api.telegram.org/bot${TG_TOKEN}/sendMessage?chat_id=${TG_CHATID}&parse_mode=Markdown" | jq '.ok')
 	[[ $str != "true" ]] && ERREXIT 249 "Telegram API failed...."
 	return 0
 }
@@ -127,7 +127,6 @@ while :; do
 	sleep $((INTERVAL - (ts_now - ts_last)))
 	ts_last=$((ts_last + INTERVAL))
 done
-
 
 
 

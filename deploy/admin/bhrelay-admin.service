@@ -1,0 +1,21 @@
+[Unit]
+Description=BH Socket Relay Admin Panel
+After=network.target gsrnd.service
+Wants=gsrnd.service
+
+[Service]
+Type=simple
+User=gsnet
+Group=gsnet
+EnvironmentFile=/etc/bhsocket-admin.env
+ExecStart=/usr/local/bin/bhrelay-admin
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/bhsocket-admin
+
+[Install]
+WantedBy=multi-user.target

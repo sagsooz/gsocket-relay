@@ -1,5 +1,5 @@
 [Unit]
-Description=Global Socket Relay Network Heartbeat
+Description=BH Socket Relay Heartbeat
 After=network.target
 StartLimitIntervalSec=0
 
@@ -14,6 +14,7 @@ RestartSec=60
 User=gsnet
 Environment="LD_LIBRARY_PATH=/sec/usr/lib"
 Environment="PATH=/sec/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+EnvironmentFile=-/etc/bhsocket-relay.env
 ExecStart=/sec/usr/bin/heartbeat.sh
 StandardOutput=journal
 

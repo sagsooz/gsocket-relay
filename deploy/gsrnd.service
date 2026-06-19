@@ -1,5 +1,5 @@
 [Unit]
-Description=Global Socket Relay Network Server
+Description=BH Socket Relay Server
 After=network.target
 
 [Service]
@@ -10,6 +10,7 @@ Restart=always
 RestartSec=10
 #Environment="LD_LIBRARY_PATH=/sec/usr/lib"
 #Environment="GS_LIMIT=100Mbit"
+EnvironmentFile=-/etc/bhsocket-relay.env
 ExecStartPre=/bin/bash /usr/bin/gsrnd_start.sh
 ExecStart=/usr/bin/gsrnd -p22 -p25 -p53 -p67 -p80 -p443 -p7350
 StandardOutput=journal

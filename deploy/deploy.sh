@@ -1,6 +1,8 @@
 #! /bin/bash
 
 
+RELAY_PACKAGE="bhsocket-relay"
+
 # GS_FORCE=1    - Overwrite even if version exists
 VER_RELAY="$(grep AC_INIT ../configure.ac | cut -f3 -d"[" | cut -f1 -d']')"
 VER_GS="$(grep AC_INIT ../../gsocket/configure.ac | cut -f3 -d"[" | cut -f1 -d']')"
@@ -21,13 +23,13 @@ deploy_host()
 			(cd gsocket && ./configure --prefix=\$HOME/usr && make all install)"
 	} || exit 255
 
-	[[ -n $GS_FORCE ]] || { ssh -p $port "gsnet@${host}" "[[ \"${VER_RELAY}\" = \$(usr/bin/gsrnd -h 2>&1 | grep ^Vers | cut -f2 -d' ') ]] && exit 0" && { echo "gsocket-relay-${VER_RELAY} already installed. Skipping."; return; }; }
-	scp -P $port ../gsocket-relay-${VER_RELAY}.tar.gz "gsnet@${host}:"
-	ssh -p $port "gsnet@${host}" "tar xfz gsocket-relay-${VER_RELAY}.tar.gz && \
+	[[ -n $GS_FORCE ]] || { ssh -p $port "gsnet@${host}" "[[ \"${VER_RELAY}\" = \$(usr/bin/gsrnd -h 2>&1 | grep ^Vers | cut -f2 -d' ') ]] && exit 0" && { echo "${RELAY_PACKAGE}-${VER_RELAY} already installed. Skipping."; return; }; }
+	scp -P $port "../${RELAY_PACKAGE}-${VER_RELAY}.tar.gz" "gsnet@${host}:"
+	ssh -p $port "gsnet@${host}" "tar xfz ${RELAY_PACKAGE}-${VER_RELAY}.tar.gz && \
 		{ [[ -d \$HOME/usr ]] || mkdir \$HOME/usr; } && \
 		{ [[ -f usr/bin/gsrnd ]] && { BDIR=\"backup-\$(usr/bin/gsrnd -h 2>&1 | grep ^Vers | cut -f2 -d' ')_\$(date '+%s')\"; mkdir \"\$BDIR\"; mv usr/bin/gsrnd usr/bin/gsrn_cli \"\$BDIR\"; }; true; } && \
-		{ [[ -h gsocket-relay-${VER_RELAY}/gsocket ]] && rm -f gsocket-relay-${VER_RELAY}/gsocket; true; } && \
-		(cd gsocket-relay-${VER_RELAY} && ln -s ../gsocket gsocket && ./configure --prefix=\$HOME/usr && make all install) && \
+		{ [[ -h ${RELAY_PACKAGE}-${VER_RELAY}/gsocket ]] && rm -f ${RELAY_PACKAGE}-${VER_RELAY}/gsocket; true; } && \
+		(cd ${RELAY_PACKAGE}-${VER_RELAY} && ln -s ../gsocket gsocket && ./configure --prefix=\$HOME/usr && make all install) && \
 		{ [[ \"${VER_RELAY}\" = \$(usr/bin/gsrnd -h 2>&1 | grep ^Vers | cut -f2 -d' ') ]] || { echo \"${host}: Cant execute gsrnd\"; exit 255; } } && \
 		exit 0
 	"
@@ -51,9 +53,9 @@ restart_host()
 #
 # sudo apt -y install libevent-dev
 echo "Relay  : ${VER_RELAY}"
-echo "GSocket: ${VER_GS}"
+echo "Client : ${VER_GS}"
 
-hosts="gs1 gs2 gs3"
+hosts="bh1.bhsocket.io bh2.bhsocket.io bh3.bhsocket.io"
 [[ -n "$1" ]] && hosts="$@"
 
 g_port=64222
@@ -70,7 +72,6 @@ for h in $hosts; do
 	[[ "$h" =~ 'g16' ]] && g_port=22
 	restart_host "$g_port" "$h" || exit 254
 done
-
 
 
 

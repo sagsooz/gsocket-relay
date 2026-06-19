@@ -1,0 +1,4 @@
+DOMAIN=bhsocket.io
+HOSTS+=("bh1")
+# HOSTS+=("bh2")
+# HOSTS+=("bh3")

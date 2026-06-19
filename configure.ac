@@ -1,6 +1,6 @@
 dnl Process this File with autoconf to produce a configure script.
 AC_PREREQ([2.69])
-AC_INIT([gsocket-relay],[1.0.15])
+AC_INIT([bhsocket-relay],[1.0.15])
 AC_CONFIG_AUX_DIR(config)
 AC_CANONICAL_TARGET
 
@@ -31,8 +31,9 @@ if test "${prefix}" != "/usr/local" ; then
 	trydir_l="${trydir_l} /usr/local/lib"
 fi
 
-dnl Try include paths (especially on OSX)
+dnl Try include paths (especially on OSX/Homebrew)
 trydir_i="${trydir_i} /usr/local/opt/openssl/include /opt/homebrew/opt/openssl/include"
+trydir_i="${trydir_i} /usr/local/opt/libevent/include /opt/homebrew/opt/libevent/include"
 for xincdir in $trydir_i ; do
 	if test ! -d "$xincdir" ; then
 		continue;
@@ -46,6 +47,7 @@ done
 
 dnl Try library paths...
 trydir_l="${trydir_l} /usr/local/opt/openssl/lib /opt/homebrew/opt/openssl/lib"
+trydir_l="${trydir_l} /usr/local/opt/libevent/lib /opt/homebrew/opt/libevent/lib"
 for xlibdir in $trydir_l ; do
 	if test ! -d "$xlibdir" ; then
 		continue;
@@ -254,4 +256,3 @@ if test x"${ARDIRWARN}" = x1; then
 	AC_MSG_WARN([Build tools seem to be a mix of GNU and Apple.])
 	AC_MSG_WARN([Alex, try 'PATH=/usr/bin:\$PATH ./configure'.])
 fi
-

@@ -15,7 +15,7 @@ tg_msg()
 	local str
 	[[ -z "$TG_TOKEN" ]] && return
 
-	str=$(curl -fLSs --retry 3 --max-time 15 --data-urlencode "text=\[$(date '+%F %T' -u)]\[${MYNAME:-GS}] $*" "https://api.telegram.org/bot${TG_TOKEN}/sendMessage?chat_id=${TG_CHATID}&parse_mode=Markdown" | jq '.ok')
+	str=$(curl -fLSs --retry 3 --max-time 15 --data-urlencode "text=\[$(date '+%F %T' -u)]\[${MYNAME:-BH}] $*" "https://api.telegram.org/bot${TG_TOKEN}/sendMessage?chat_id=${TG_CHATID}&parse_mode=Markdown" | jq '.ok')
 	[[ $str != "true" ]] && return 255 #ERREXIT 249 "Telegram API failed...."
 	return 0
 }
@@ -29,7 +29,7 @@ ipt() {
 	iptables "$first" "$@"
 }
 
-tg_msg "GSRND started."
+tg_msg "BH Socket relay started."
 
 DEV_GW=$(ip route show | grep default | head -n1 | awk '{print $5;}')
 TC_ARGS=()
@@ -49,7 +49,7 @@ MEM_P70=$((MEM_KB * 70 / 100 / 4 ))
 echo 1048576 >/proc/sys/net/core/somaxconn
 echo 1048576 >/proc/sys/net/ipv4/tcp_max_syn_backlog
 
-# Disabled by default. We dont use conntracking on gsocket-relay servers.
+# Disabled by default. We do not use conntracking on BH Socket relay servers.
 modprobe nf_conntrack
 echo 1048576 >/proc/sys/net/netfilter/nf_conntrack_max
 P="$(grep -m1 ^Port /etc/ssh/sshd_config | sed -e 's|Port \(.\)|\1|g')"
@@ -114,4 +114,3 @@ grep . /proc/sys/net/ipv4/tcp*mem
 # NOTE: It's started from systemd via:
 # ExecStartPre=/bin/bash /home/gsnet/usr/bin/gsrnd_start.sh
 # ExecStart=/home/gsnet/usr/bin/gsrnd -p...
-
