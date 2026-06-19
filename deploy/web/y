@@ -31,7 +31,19 @@ pick_prefix() {
     return
   fi
 
-  printf '%s/.local\n' "$HOME"
+  local home_dir
+  home_dir="${HOME:-}"
+  if [[ -z "$home_dir" ]]; then
+    home_dir="$(getent passwd "$(id -u)" 2>/dev/null | cut -d: -f6 || true)"
+  fi
+  if [[ -z "$home_dir" ]]; then
+    home_dir="$(cd ~ 2>/dev/null && pwd || true)"
+  fi
+  if [[ -z "$home_dir" ]]; then
+    fail "HOME is not set; run as root or set BH_PREFIX=/path/to/install"
+  fi
+
+  printf '%s/.local\n' "$home_dir"
 }
 
 detect_package() {
@@ -140,6 +152,7 @@ main() {
   need find
   need install
   need mktemp
+  need id
 
   local prefix
   prefix="$(pick_prefix)"
