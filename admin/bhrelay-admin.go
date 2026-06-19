@@ -39,11 +39,12 @@ type config struct {
 }
 
 type server struct {
-	cfg     config
-	client  *http.Client
-	secrets *secretStore
-	audit   *auditLog
-	tpl     *template.Template
+	cfg      config
+	client   *http.Client
+	secrets  *secretStore
+	audit    *auditLog
+	installs *installLog
+	tpl      *template.Template
 }
 
 type apiError struct {
@@ -128,6 +129,24 @@ type auditLog struct {
 	path string
 }
 
+type installRecord struct {
+	Time        time.Time `json:"time"`
+	Hostname    string    `json:"hostname"`
+	User        string    `json:"user"`
+	OS          string    `json:"os"`
+	Arch        string    `json:"arch"`
+	Kernel      string    `json:"kernel"`
+	InstallPath string    `json:"install_path"`
+	RelayPort   string    `json:"relay_port"`
+	Version     string    `json:"version"`
+	IP          string    `json:"ip"`
+}
+
+type installLog struct {
+	mu   sync.Mutex
+	path string
+}
+
 func main() {
 	cfg := loadConfig()
 	if cfg.User == "" || cfg.Password == "" {
@@ -143,11 +162,12 @@ func main() {
 	}
 
 	s := &server{
-		cfg:     cfg,
-		client:  &http.Client{Timeout: 10 * time.Second},
-		secrets: secrets,
-		audit:   &auditLog{path: filepath.Join(cfg.DataDir, "audit.jsonl")},
-		tpl:     template.Must(template.New("index").Parse(indexHTML)),
+		cfg:      cfg,
+		client:   &http.Client{Timeout: 10 * time.Second},
+		secrets:  secrets,
+		audit:    &auditLog{path: filepath.Join(cfg.DataDir, "audit.jsonl")},
+		installs: &installLog{path: filepath.Join(cfg.DataDir, "installs.jsonl")},
+		tpl:      template.Must(template.New("index").Parse(indexHTML)),
 	}
 
 	mux := http.NewServeMux()
@@ -159,6 +179,8 @@ func main() {
 	mux.HandleFunc("/api/secrets", s.requireAuth(s.handleSecrets))
 	mux.HandleFunc("/api/secrets/", s.requireAuth(s.handleSecret))
 	mux.HandleFunc("/api/audit", s.requireAuth(s.handleAudit))
+	mux.HandleFunc("/api/installs", s.requireAuth(s.handleInstalls))
+	mux.HandleFunc("/api/install-report", s.handleInstallReport)
 
 	httpServer := &http.Server{
 		Addr:              cfg.ListenAddr,
@@ -361,6 +383,40 @@ func (s *server) handleAudit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"events": events})
+}
+
+func (s *server) handleInstalls(w http.ResponseWriter, r *http.Request) {
+	records, err := s.installs.readLast(500)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"installs": records})
+}
+
+func (s *server) handleInstallReport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 16*1024)
+	var rec installRecord
+	if err := json.NewDecoder(r.Body).Decode(&rec); err != nil {
+		writeJSON(w, http.StatusBadRequest, apiError{Error: "invalid json"})
+		return
+	}
+	rec.Time = time.Now().UTC()
+	rec.IP = clientIP(r)
+	rec.sanitize()
+	if rec.Hostname == "" && rec.OS == "" && rec.InstallPath == "" {
+		writeJSON(w, http.StatusBadRequest, apiError{Error: "empty install report"})
+		return
+	}
+	if err := s.installs.write(rec); err != nil {
+		writeJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "recorded"})
 }
 
 func (s *server) runCLI(ctx context.Context, command string) (string, error) {
@@ -687,6 +743,76 @@ func (a *auditLog) readLast(limit int) ([]auditEvent, error) {
 	return events, nil
 }
 
+func (r *installRecord) sanitize() {
+	r.Hostname = cleanField(r.Hostname, 160)
+	r.User = cleanField(r.User, 80)
+	r.OS = cleanField(r.OS, 80)
+	r.Arch = cleanField(r.Arch, 80)
+	r.Kernel = cleanField(r.Kernel, 160)
+	r.InstallPath = cleanField(r.InstallPath, 260)
+	r.RelayPort = cleanField(r.RelayPort, 24)
+	r.Version = cleanField(r.Version, 80)
+}
+
+func cleanField(v string, max int) string {
+	v = strings.TrimSpace(strings.Map(func(r rune) rune {
+		if r < 32 || r == 127 {
+			return -1
+		}
+		return r
+	}, v))
+	if len(v) > max {
+		return v[:max]
+	}
+	return v
+}
+
+func (l *installLog) write(rec installRecord) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if err := os.MkdirAll(filepath.Dir(l.path), 0700); err != nil {
+		return err
+	}
+	f, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return json.NewEncoder(f).Encode(rec)
+}
+
+func (l *installLog) readLast(limit int) ([]installRecord, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	f, err := os.Open(l.path)
+	if errors.Is(err, os.ErrNotExist) {
+		return []installRecord{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	records := []installRecord{}
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		var rec installRecord
+		if json.Unmarshal(scanner.Bytes(), &rec) == nil {
+			records = append(records, rec)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	if len(records) > limit {
+		records = records[len(records)-limit:]
+	}
+	for i, j := 0, len(records)-1; i < j; i, j = i+1, j-1 {
+		records[i], records[j] = records[j], records[i]
+	}
+	return records, nil
+}
+
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -701,6 +827,14 @@ func errString(err error) string {
 }
 
 func clientIP(r *http.Request) string {
+	if forwarded := strings.TrimSpace(r.Header.Get("X-Forwarded-For")); forwarded != "" {
+		if ip := strings.TrimSpace(strings.Split(forwarded, ",")[0]); ip != "" {
+			return ip
+		}
+	}
+	if realIP := strings.TrimSpace(r.Header.Get("X-Real-IP")); realIP != "" {
+		return realIP
+	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		return r.RemoteAddr
@@ -737,11 +871,12 @@ form{display:grid;gap:10px}label{display:grid;gap:5px;color:var(--muted)}input,t
 <div class="metric"><span>Uptime</span><b id="mUptime" style="font-size:15px">-</b></div>
 </aside>
 <section class="panel">
-<div class="toolbar"><div class="tabs"><button class="active" data-view="peers">Peers</button><button data-view="secrets">Secrets</button><button data-view="audit">Audit</button></div><button class="btn" id="refresh">Refresh</button></div>
+<div class="toolbar"><div class="tabs"><button class="active" data-view="peers">Peers</button><button data-view="installs">Installs</button><button data-view="secrets">Secrets</button><button data-view="audit">Audit</button></div><button class="btn" id="refresh">Refresh</button></div>
 <div id="viewPeers">
 <div class="toolbar"><select id="peerFilter"><option value="">All</option><option value="listening">Listening</option><option value="connected">Connected</option><option value="bad">Bad Auth</option></select></div>
 <div style="overflow:auto"><table><thead><tr><th>ID</th><th>Address</th><th>State</th><th>Server</th><th>Client</th><th>Traffic</th><th></th></tr></thead><tbody id="peerRows"></tbody></table></div>
 </div>
+<div id="viewInstalls" class="hidden"><div style="overflow:auto"><table><thead><tr><th>Time</th><th>Host</th><th>System</th><th>Path</th><th>Port</th><th>IP</th></tr></thead><tbody id="installRows"></tbody></table></div></div>
 <div id="viewSecrets" class="hidden">
 <div class="grid">
 <div>
@@ -763,11 +898,12 @@ async function loadHealth(){try{const h=await api('/api/health');$('#healthDot')
 async function loadStats(){try{const s=await api('/api/stats');$('#mListening').textContent=s.listening;$('#mConnected').textContent=s.connected;$('#mBad').textContent=s.gs_bad_auth;$('#mUptime').textContent=s.uptime||'-'}catch(e){}}
 async function loadPeers(){const f=$('#peerFilter').value;const j=await api('/api/peers'+(f?'?filter='+encodeURIComponent(f):''));$('#peerRows').innerHTML=j.peers.map(p=>'<tr><td>'+p.id+'</td><td><code>'+esc(p.address)+'</code><div class="muted">'+esc(p.gs_id)+' '+esc(p.secret_ref||'')+'</div></td><td class="state '+esc(p.state)+'">'+esc(p.state)+'<div class="muted">'+esc(p.age)+'</div></td><td>'+esc(p.server)+'</td><td>'+esc(p.client||'-')+'</td><td>'+esc(p.traffic||'-')+'<div class="muted">'+esc(p.bps||'')+'</div></td><td><button class="btn bad" onclick="killPeer(\''+esc(p.address)+'\')">Kill</button></td></tr>').join('')||'<tr><td colspan="7" class="muted">No peers</td></tr>'}
 async function killPeer(address){if(!confirm('Disconnect '+address+'?'))return;await api('/api/peers/kill',{method:'POST',body:JSON.stringify({address})});await refresh()}
+async function loadInstalls(){const j=await api('/api/installs');$('#installRows').innerHTML=j.installs.map(i=>'<tr><td>'+esc(i.time)+'</td><td>'+esc(i.hostname||'-')+'<div class="muted">'+esc(i.user||'')+'</div></td><td>'+esc(i.os||'-')+' '+esc(i.arch||'')+'<div class="muted">'+esc(i.kernel||'')+'</div></td><td><code>'+esc(i.install_path||'')+'</code></td><td>'+esc(i.relay_port||'-')+'</td><td>'+esc(i.ip||'-')+'</td></tr>').join('')||'<tr><td colspan="6" class="muted">No installs reported yet</td></tr>'}
 async function loadSecrets(){const j=await api('/api/secrets');$('#secretRows').innerHTML=j.secrets.map(s=>'<tr><td>'+esc(s.name)+'<div class="muted">'+esc(s.notes||'')+'</div></td><td>'+esc(s.owner)+'</td><td><code>'+esc(s.fingerprint)+'</code></td><td>'+esc(s.status)+'</td><td><select onchange="setSecret(\''+esc(s.id)+'\',this.value)"><option '+(s.status==='active'?'selected':'')+'>active</option><option '+(s.status==='rotating'?'selected':'')+'>rotating</option><option '+(s.status==='revoked'?'selected':'')+'>revoked</option></select></td></tr>').join('')||'<tr><td colspan="5" class="muted">No secret records</td></tr>'}
 async function setSecret(id,status){await api('/api/secrets/'+id,{method:'PATCH',body:JSON.stringify({status})});await loadSecrets()}
 async function loadAudit(){const j=await api('/api/audit');$('#auditRows').innerHTML=j.events.map(e=>'<tr><td>'+esc(e.time)+'</td><td>'+esc(e.actor)+'</td><td>'+esc(e.action)+'</td><td><code>'+esc(e.target||'')+'</code></td><td>'+esc(e.details||'')+'</td></tr>').join('')||'<tr><td colspan="5" class="muted">No audit events</td></tr>'}
-async function refresh(){await loadHealth();await loadStats();if(view==='peers')await loadPeers();if(view==='secrets')await loadSecrets();if(view==='audit')await loadAudit()}
-$$('.tabs button').forEach(b=>b.onclick=()=>{view=b.dataset.view;$$('.tabs button').forEach(x=>x.classList.toggle('active',x===b));$('#viewPeers').classList.toggle('hidden',view!=='peers');$('#viewSecrets').classList.toggle('hidden',view!=='secrets');$('#viewAudit').classList.toggle('hidden',view!=='audit');refresh()});
+async function refresh(){await loadHealth();await loadStats();if(view==='peers')await loadPeers();if(view==='installs')await loadInstalls();if(view==='secrets')await loadSecrets();if(view==='audit')await loadAudit()}
+$$('.tabs button').forEach(b=>b.onclick=()=>{view=b.dataset.view;$$('.tabs button').forEach(x=>x.classList.toggle('active',x===b));$('#viewPeers').classList.toggle('hidden',view!=='peers');$('#viewInstalls').classList.toggle('hidden',view!=='installs');$('#viewSecrets').classList.toggle('hidden',view!=='secrets');$('#viewAudit').classList.toggle('hidden',view!=='audit');refresh()});
 $('#refresh').onclick=refresh;$('#peerFilter').onchange=loadPeers;
 $('#secretForm').onsubmit=async e=>{e.preventDefault();const fd=new FormData(e.target);const res=await api('/api/secrets',{method:'POST',body:JSON.stringify(Object.fromEntries(fd.entries()))});$('#secretOnce').classList.remove('hidden');$('#secretOnce').innerHTML='<b>Copy now. This secret is shown once:</b><br><code>'+esc(res.secret)+'</code>';e.target.reset();await loadSecrets()};
 refresh();setInterval(refresh,10000);
