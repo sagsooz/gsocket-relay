@@ -6,6 +6,7 @@ BH_PORT="${BH_PORT:-7350}"
 BH_BASE_URL="${BH_BASE_URL:-https://bhsocket.io}"
 BH_NAME="bh-netcat"
 BH_TMP=""
+BH_SECRET="${S:-${X:-}}"
 
 say() {
   printf '%s\n' "$*"
@@ -151,7 +152,7 @@ cleanup() {
 }
 
 install_client() {
-  local prefix="$1" package tmp archive extracted real_path bin_path lib_path generated_secret
+  local prefix="$1" package tmp archive extracted real_path bin_path lib_path generated_secret test_log test_ret
   package="$(detect_package)"
   say "--> Trying $(package_label "$package")"
   tmp="$(mktemp -d)"
@@ -208,20 +209,45 @@ EOF
 
   step "Testing binaries"
   if generated_secret="$("$bin_path" -g)"; then ok; else failed; return 1; fi
+  if [[ -z "$BH_SECRET" ]]; then
+    BH_SECRET="$generated_secret"
+  fi
 
   step "Testing BH Socket Relay Network"
-  if command -v nc >/dev/null 2>&1; then
-    if nc -z -w 5 "$BH_HOST" "$BH_PORT" >/dev/null 2>&1; then ok; else failed; return 1; fi
-  elif command -v timeout >/dev/null 2>&1; then
-    if timeout 5 bash -c ":</dev/tcp/${BH_HOST}/${BH_PORT}" >/dev/null 2>&1; then ok; else failed; return 1; fi
-  else
-    skipping
-  fi
+  set +e
+  test_log="$(_GSOCKET_SERVER_CHECK_SEC=15 "$bin_path" -s "$BH_SECRET" -t 2>&1)"
+  test_ret=$?
+  set -e
+  case "$test_ret" in
+    61)
+      ok
+      ;;
+    0)
+      failed
+      say "--> Secret '${BH_SECRET}' is already used."
+      return 1
+      ;;
+    202|203)
+      failed
+      [[ -n "$test_log" ]] && printf '%s\n' "$test_log" >&2
+      fail "Cannot connect to BH Socket relay. Check firewall/DNS or set BH_HOST/BH_PORT."
+      ;;
+    255)
+      failed
+      [[ -n "$test_log" ]] && printf '%s\n' "$test_log" >&2
+      fail "A transparent proxy or network reset was detected."
+      ;;
+    *)
+      failed
+      [[ -n "$test_log" ]] && printf '%s\n' "$test_log" >&2
+      fail "relay test failed with exit code ${test_ret}"
+      ;;
+  esac
 
   step "Installing remote access"
   skipping
   say "--> This installer does not start hidden or persistent remote access."
-  say "--> Start a listener explicitly when needed: ${BH_NAME} -s \"${S:-$generated_secret}\" -l -i"
+  say "--> Start a listener explicitly when needed: ${BH_NAME} -s \"${BH_SECRET}\" -l -i"
 
   step "Executing webhooks"
   skipping
@@ -234,9 +260,9 @@ EOF
   say ""
   say "--> To uninstall use BH_UNINSTALL=1 bash -c \"\$(curl -fsSL ${BH_BASE_URL%/}/y)\""
   say "--> To connect use one of the following:"
-  say "--> ${BH_NAME} -s \"${S:-$generated_secret}\" -i"
-  say "--> S=\"${S:-$generated_secret}\" bash -c \"\$(curl -fsSL ${BH_BASE_URL%/}/y)\""
-  say "--> S=\"${S:-$generated_secret}\" bash -c \"\$(wget -qO- ${BH_BASE_URL%/}/y)\""
+  say "--> ${BH_NAME} -s \"${BH_SECRET}\" -i"
+  say "--> S=\"${BH_SECRET}\" bash -c \"\$(curl -fsSL ${BH_BASE_URL%/}/y)\""
+  say "--> S=\"${BH_SECRET}\" bash -c \"\$(wget -qO- ${BH_BASE_URL%/}/y)\""
 }
 
 main() {
