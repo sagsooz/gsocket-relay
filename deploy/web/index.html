@@ -3,103 +3,201 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>BH Socket</title>
+  <title>BlackHat Socket</title>
   <style>
     :root {
       color-scheme: dark;
-      --bg: #0c1117;
-      --panel: #111a24;
-      --panel-2: #162232;
+      --bg: #080b0f;
+      --surface: #11161d;
+      --surface-2: #151d26;
       --text: #eef4f7;
-      --muted: #9fb0bc;
-      --line: #243446;
-      --accent: #18c29c;
-      --accent-2: #d9a441;
-      --danger: #e86f6f;
+      --muted: #9aa8b2;
+      --line: #2a3745;
+      --green: #18c29c;
+      --gold: #d9a441;
+      --red: #e56b6f;
+      --blue: #6da7ff;
     }
 
     * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
 
     body {
       margin: 0;
       min-height: 100vh;
       font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background:
-        radial-gradient(circle at 75% 10%, rgba(24, 194, 156, 0.14), transparent 28rem),
-        linear-gradient(135deg, #0c1117 0%, #101923 52%, #121820 100%);
+        linear-gradient(rgba(8, 11, 15, 0.72), rgba(8, 11, 15, 0.94)),
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'%3E%3Cg fill='none' stroke='%23253442' stroke-width='1' opacity='0.55'%3E%3Cpath d='M0 30h180M0 90h180M0 150h180M30 0v180M90 0v180M150 0v180'/%3E%3Ccircle cx='90' cy='90' r='58'/%3E%3Cpath d='M32 90h116M90 32v116'/%3E%3C/g%3E%3C/svg%3E"),
+        #080b0f;
       color: var(--text);
     }
 
-    main {
-      width: min(1180px, calc(100% - 40px));
-      margin: 0 auto;
-      padding: 48px 0 44px;
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background: linear-gradient(120deg, rgba(24, 194, 156, 0.08), transparent 34%, rgba(217, 164, 65, 0.07));
     }
 
-    .hero {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(330px, 480px);
-      gap: 42px;
+    main {
+      position: relative;
+      width: min(1180px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: 30px 0 52px;
+    }
+
+    nav {
+      display: flex;
       align-items: center;
-      min-height: 62vh;
+      justify-content: space-between;
+      gap: 18px;
+      min-height: 52px;
+      margin-bottom: 34px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+      font-weight: 800;
+      letter-spacing: 0;
     }
 
     .mark {
       display: inline-grid;
       place-items: center;
-      width: 54px;
-      height: 54px;
-      border: 1px solid rgba(24, 194, 156, 0.42);
+      width: 44px;
+      height: 44px;
+      border: 1px solid rgba(24, 194, 156, 0.48);
       border-radius: 8px;
-      background: rgba(24, 194, 156, 0.09);
-      color: var(--accent);
+      background: rgba(24, 194, 156, 0.11);
+      color: var(--green);
+      font-size: 16px;
+      flex: 0 0 auto;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    a, button { font: inherit; }
+
+    .nav-links a {
+      color: var(--muted);
+      text-decoration: none;
+      padding: 8px 10px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+    }
+
+    .nav-links a:hover {
+      color: var(--text);
+      border-color: var(--line);
+      background: rgba(17, 22, 29, 0.72);
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(340px, 480px);
+      gap: 36px;
+      align-items: center;
+      min-height: calc(100vh - 150px);
+      padding-bottom: 28px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      margin: 0 0 18px;
+      color: var(--gold);
+      font-size: 13px;
       font-weight: 800;
-      font-size: 18px;
-      letter-spacing: 0;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .eyebrow::before {
+      content: "";
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 18px rgba(24, 194, 156, 0.9);
     }
 
     h1 {
-      margin: 28px 0 16px;
-      max-width: 760px;
-      font-size: clamp(42px, 7vw, 86px);
-      line-height: 0.95;
+      margin: 0 0 18px;
+      max-width: 780px;
+      font-size: clamp(48px, 8vw, 96px);
+      line-height: 0.94;
       letter-spacing: 0;
     }
 
     h2 {
       margin: 0 0 18px;
-      font-size: 26px;
+      font-size: 28px;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 0 0 10px;
+      font-size: 18px;
       letter-spacing: 0;
     }
 
     .lead {
-      max-width: 680px;
+      max-width: 700px;
       margin: 0;
       color: var(--muted);
       font-size: 19px;
-      line-height: 1.6;
+      line-height: 1.65;
     }
 
-    .command, pre {
-      overflow-x: auto;
-      white-space: pre;
-      font: 14px/1.65 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 28px;
     }
 
-    .command {
-      margin-top: 34px;
-      padding: 16px 18px;
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 42px;
+      padding: 10px 14px;
       border: 1px solid var(--line);
       border-radius: 8px;
-      background: #080d12;
-      color: #d9fff3;
+      color: var(--text);
+      background: rgba(17, 22, 29, 0.82);
+      text-decoration: none;
+      cursor: pointer;
     }
 
-    .panel, .platform, .note {
+    .btn.primary {
+      border-color: rgba(24, 194, 156, 0.7);
+      background: var(--green);
+      color: #05100d;
+      font-weight: 800;
+    }
+
+    .btn:hover { transform: translateY(-1px); }
+
+    .panel, .platform, .note, .flow-item {
       border: 1px solid var(--line);
       border-radius: 8px;
-      background: linear-gradient(180deg, rgba(22, 34, 50, 0.95), rgba(17, 26, 36, 0.95));
-      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.18);
+      background: linear-gradient(180deg, rgba(21, 29, 38, 0.96), rgba(13, 18, 24, 0.96));
+      box-shadow: 0 26px 80px rgba(0, 0, 0, 0.28);
       overflow: hidden;
     }
 
@@ -108,7 +206,7 @@
       align-items: center;
       justify-content: space-between;
       gap: 16px;
-      padding: 16px 18px;
+      padding: 15px 18px;
       border-bottom: 1px solid var(--line);
       color: var(--muted);
       font-size: 14px;
@@ -118,8 +216,8 @@
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      color: var(--accent);
-      font-weight: 700;
+      color: var(--green);
+      font-weight: 800;
     }
 
     .status::before {
@@ -127,48 +225,81 @@
       width: 8px;
       height: 8px;
       border-radius: 50%;
-      background: var(--accent);
+      background: var(--green);
       box-shadow: 0 0 16px rgba(24, 194, 156, 0.8);
     }
 
-    .panel-body { padding: 22px; }
+    .panel-body { padding: 20px; }
 
     .label {
       margin: 0 0 10px;
-      color: var(--accent-2);
-      font-size: 13px;
-      font-weight: 800;
+      color: var(--gold);
+      font-size: 12px;
+      font-weight: 900;
       text-transform: uppercase;
       letter-spacing: 0.08em;
     }
 
-    pre {
-      margin: 0;
-      padding: 16px;
+    .command-box {
+      position: relative;
+      margin: 12px 0 0;
+      border: 1px solid #20303d;
       border-radius: 8px;
       background: #071015;
-      border: 1px solid #1c2d3b;
-      color: #eef4f7;
+      overflow: hidden;
+    }
+
+    .command-box pre {
+      margin: 0;
+      padding: 54px 16px 16px;
+      min-height: 54px;
+      overflow-x: auto;
+      white-space: pre;
+      color: #d9fff3;
+      font: 14px/1.65 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    .copy-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      min-width: 78px;
+      min-height: 32px;
+      border: 1px solid rgba(24, 194, 156, 0.42);
+      border-radius: 8px;
+      background: rgba(24, 194, 156, 0.12);
+      color: var(--text);
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .copy-btn:hover { background: rgba(24, 194, 156, 0.22); }
+
+    .copy-btn.copied {
+      border-color: rgba(217, 164, 65, 0.65);
+      background: rgba(217, 164, 65, 0.16);
+      color: #ffe5aa;
     }
 
     .meta {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 14px;
-      margin-top: 18px;
+      gap: 12px;
+      margin-top: 16px;
     }
 
     .metric {
       min-width: 0;
-      padding: 14px;
+      padding: 13px;
       border: 1px solid var(--line);
       border-radius: 8px;
-      background: rgba(12, 17, 23, 0.55);
+      background: rgba(8, 11, 15, 0.58);
     }
 
     .metric span {
       display: block;
-      margin-bottom: 8px;
+      margin-bottom: 7px;
       color: var(--muted);
       font-size: 12px;
       text-transform: uppercase;
@@ -178,13 +309,64 @@
     .metric strong {
       display: block;
       overflow-wrap: anywhere;
-      font-size: 17px;
       color: var(--text);
+      font-size: 16px;
     }
 
     section {
-      padding-top: 36px;
-      border-top: 1px solid rgba(36, 52, 70, 0.7);
+      padding-top: 42px;
+      margin-top: 18px;
+      border-top: 1px solid rgba(42, 55, 69, 0.82);
+    }
+
+    .section-head {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 20px;
+      margin-bottom: 18px;
+    }
+
+    .section-head p {
+      max-width: 620px;
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    .deploy-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.9fr);
+      gap: 16px;
+    }
+
+    .note {
+      padding: 18px;
+      box-shadow: none;
+    }
+
+    .note p, .platform p, .flow-item p {
+      margin: 0 0 14px;
+      color: var(--muted);
+      line-height: 1.55;
+      font-size: 14px;
+    }
+
+    .flow {
+      display: grid;
+      gap: 10px;
+    }
+
+    .flow-item {
+      padding: 14px;
+      box-shadow: none;
+      background: rgba(17, 22, 29, 0.78);
+    }
+
+    .flow-item strong {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--text);
     }
 
     .platforms {
@@ -194,33 +376,21 @@
     }
 
     .platform {
-      padding: 20px;
+      padding: 18px;
       min-width: 0;
-    }
-
-    .platform h3 {
-      margin: 0 0 12px;
-      font-size: 18px;
-      letter-spacing: 0;
-    }
-
-    .platform p, .note p {
-      margin: 0 0 14px;
-      color: var(--muted);
-      line-height: 1.55;
-      font-size: 14px;
-    }
-
-    .platform code {
-      color: #d9fff3;
-      font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      overflow-wrap: anywhere;
+      box-shadow: none;
     }
 
     .mini {
       margin-top: 12px;
       padding-top: 12px;
-      border-top: 1px solid rgba(36, 52, 70, 0.75);
+      border-top: 1px solid rgba(42, 55, 69, 0.82);
+    }
+
+    .mini code {
+      color: #d9fff3;
+      font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      overflow-wrap: anywhere;
     }
 
     .ports {
@@ -234,55 +404,67 @@
       padding: 6px 9px;
       border-radius: 8px;
       border: 1px solid var(--line);
-      background: rgba(12, 17, 23, 0.64);
+      background: rgba(8, 11, 15, 0.64);
       color: var(--muted);
       font: 12px/1 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     }
 
-    .note {
-      margin-top: 16px;
-      padding: 18px 20px;
-      box-shadow: none;
-      background: rgba(17, 26, 36, 0.72);
-    }
-
     @media (max-width: 960px) {
-      main { width: min(100% - 28px, 1180px); padding-top: 34px; }
+      main { width: min(100% - 28px, 1180px); padding-top: 22px; }
+      nav { align-items: flex-start; flex-direction: column; }
+      .nav-links { justify-content: flex-start; }
       .hero { grid-template-columns: 1fr; min-height: auto; }
-      .platforms { grid-template-columns: 1fr; }
+      .deploy-grid, .platforms { grid-template-columns: 1fr; }
+      .section-head { align-items: flex-start; flex-direction: column; }
     }
 
     @media (max-width: 520px) {
-      h1 { font-size: 42px; }
+      h1 { font-size: 46px; }
       .lead { font-size: 17px; }
       .meta { grid-template-columns: 1fr; }
-      .command { font-size: 13px; }
+      .command-box pre { font-size: 13px; }
     }
   </style>
 </head>
 <body>
   <main>
+    <nav aria-label="Main navigation">
+      <div class="brand"><span class="mark">BH</span><span>BlackHat Socket</span></div>
+      <div class="nav-links">
+        <a href="#deploy">Deploy</a>
+        <a href="#install">Install</a>
+        <a href="/admin/">Admin</a>
+      </div>
+    </nav>
+
     <div class="hero">
       <div>
-        <div class="mark">BH</div>
-        <h1>BH Socket</h1>
-        <p class="lead">Deploy the BH Socket client on a remote server, then connect from your own computer with bh-netcat and the same secret.</p>
-        <div class="command">bash -c "$(curl -fsSL https://bhsocket.io/y)"</div>
+        <p class="eyebrow">Private relay network</p>
+        <h1>BlackHat Socket</h1>
+        <p class="lead">Deploy a BH Socket listener on a remote server, install bh-netcat locally, and connect back with the same secret through bhsocket.io.</p>
+        <div class="hero-actions">
+          <a class="btn primary" href="#deploy">Deploy Server</a>
+          <a class="btn" href="#install">Install Client</a>
+        </div>
       </div>
 
-      <aside class="panel" aria-label="BH Socket quick start">
+      <aside class="panel" aria-label="BlackHat Socket quick start">
         <header>
           <span>Relay endpoint</span>
           <span class="status">Online</span>
         </header>
         <div class="panel-body">
-          <p class="label">Deploy On Server</p>
-          <pre>bash -c "$(curl -fsSL https://bhsocket.io/y)"
+          <p class="label">Server deploy</p>
+          <div class="command-box" data-copy="bash -c &quot;$(curl -fsSL https://bhsocket.io/y)&quot;">
+            <button class="copy-btn" type="button">Copy</button>
+            <pre>bash -c "$(curl -fsSL https://bhsocket.io/y)"</pre>
+          </div>
 
-bh-netcat -s "SECRET_FROM_ADMIN" -l -i
-
-# From your computer
-bh-netcat -s "SECRET_FROM_ADMIN" -i</pre>
+          <p class="label" style="margin-top:18px">Connect from your computer</p>
+          <div class="command-box" data-copy="bh-netcat -s &quot;SECRET_FROM_DEPLOY&quot; -i">
+            <button class="copy-btn" type="button">Copy</button>
+            <pre>bh-netcat -s "SECRET_FROM_DEPLOY" -i</pre>
+          </div>
 
           <div class="meta">
             <div class="metric">
@@ -298,47 +480,130 @@ bh-netcat -s "SECRET_FROM_ADMIN" -i</pre>
       </aside>
     </div>
 
-    <section aria-label="Deploy commands">
-      <h2>Deploy on a server</h2>
-      <div class="note">
-        <p>Run this on the remote server. It installs bh-netcat there, selects a working relay port, registers the secret in admin, and prints the connect commands.</p>
-        <pre>bash -c "$(curl -fsSL https://bhsocket.io/y)"</pre>
-        <div class="mini"><code>Then connect from your computer: bh-netcat -s "SECRET" -i</code></div>
-        <div class="ports"><span>443</span><span>7350</span><span>53</span><span>25</span><span>67</span><span>8080</span></div>
+    <section id="deploy" aria-label="Deploy commands">
+      <div class="section-head">
+        <div>
+          <h2>Deploy on a server</h2>
+          <p>Run this on the remote Linux/macOS server. It installs bh-netcat there, selects a working relay port, registers the secret in admin, and starts a listener.</p>
+        </div>
+      </div>
+
+      <div class="deploy-grid">
+        <div class="note">
+          <p class="label">Deploy command</p>
+          <div class="command-box" data-copy="bash -c &quot;$(curl -fsSL https://bhsocket.io/y)&quot;">
+            <button class="copy-btn" type="button">Copy</button>
+            <pre>bash -c "$(curl -fsSL https://bhsocket.io/y)"</pre>
+          </div>
+          <div class="ports"><span>443</span><span>7350</span><span>53</span><span>25</span><span>67</span><span>8080</span></div>
+        </div>
+
+        <div class="flow">
+          <div class="flow-item"><strong>1. Deploy</strong><p>The server starts a listener and prints the secret.</p></div>
+          <div class="flow-item"><strong>2. Install locally</strong><p>Install bh-netcat on your own workstation.</p></div>
+          <div class="flow-item"><strong>3. Connect</strong><p>Use the same secret printed by the deploy command.</p></div>
+        </div>
       </div>
     </section>
 
-    <section aria-label="Install commands">
-      <h2>Install bh-netcat locally</h2>
+    <section id="install" aria-label="Install commands">
+      <div class="section-head">
+        <div>
+          <h2>Install bh-netcat locally</h2>
+          <p>Run one of these on your own computer. This only installs the client command; it does not deploy or generate a server secret.</p>
+        </div>
+      </div>
+
       <div class="platforms">
         <article class="platform">
           <h3>Linux</h3>
-          <p>Install the client on your workstation or laptop.</p>
-          <pre>bash -c "$(curl -fsSL https://bhsocket.io/install)"</pre>
+          <p>Install bh-netcat on your workstation.</p>
+          <div class="command-box" data-copy="bash -c &quot;$(curl -fsSL https://bhsocket.io/install)&quot;">
+            <button class="copy-btn" type="button">Copy</button>
+            <pre>bash -c "$(curl -fsSL https://bhsocket.io/install)"</pre>
+          </div>
           <div class="mini"><code>bh-netcat -h<br>bh-netcat -s "SECRET" -i</code></div>
         </article>
 
         <article class="platform">
           <h3>macOS</h3>
-          <p>Use Terminal. Intel and Apple Silicon macOS are installed directly.</p>
-          <pre>bash -c "$(curl -fsSL https://bhsocket.io/install)"</pre>
+          <p>Intel and Apple Silicon are installed directly.</p>
+          <div class="command-box" data-copy="bash -c &quot;$(curl -fsSL https://bhsocket.io/install)&quot;">
+            <button class="copy-btn" type="button">Copy</button>
+            <pre>bash -c "$(curl -fsSL https://bhsocket.io/install)"</pre>
+          </div>
           <div class="mini"><code>bh-netcat -h<br>bh-netcat -s "SECRET" -i</code></div>
         </article>
 
         <article class="platform">
           <h3>Windows</h3>
-          <p>Use PowerShell for native Windows, or Git Bash/WSL with the bash installer.</p>
-          <pre>powershell -ExecutionPolicy Bypass -Command "iwr https://bhsocket.io/install.ps1 -UseB | iex"</pre>
+          <p>Use PowerShell, or Git Bash/WSL with the bash installer.</p>
+          <div class="command-box" data-copy="powershell -ExecutionPolicy Bypass -Command &quot;iwr https://bhsocket.io/install.ps1 -UseB | iex&quot;">
+            <button class="copy-btn" type="button">Copy</button>
+            <pre>powershell -ExecutionPolicy Bypass -Command "iwr https://bhsocket.io/install.ps1 -UseB | iex"</pre>
+          </div>
           <div class="mini"><code>Git Bash: bash -c "$(curl -fsSL https://bhsocket.io/install)"</code></div>
         </article>
       </div>
 
       <div class="note">
-        <p>After installing bh-netcat on your own system, use the secret from the server deploy output or the admin panel.</p>
-        <pre>bh-netcat -h
-bh-netcat -s "SECRET" -i</pre>
+        <p class="label">Connect after install</p>
+        <p>Use the secret printed by the server deploy command.</p>
+        <div class="command-box" data-copy="bh-netcat -s &quot;SECRET_FROM_DEPLOY&quot; -i">
+          <button class="copy-btn" type="button">Copy</button>
+          <pre>bh-netcat -s "SECRET_FROM_DEPLOY" -i</pre>
+        </div>
       </div>
     </section>
   </main>
+
+  <script>
+    function fallbackCopyText(text) {
+      const area = document.createElement('textarea');
+      area.value = text;
+      area.setAttribute('readonly', '');
+      area.style.position = 'fixed';
+      area.style.opacity = '0';
+      document.body.appendChild(area);
+      area.select();
+      const copied = document.execCommand('copy');
+      area.remove();
+      if (!copied) {
+        throw new Error('copy failed');
+      }
+    }
+
+    async function copyText(text) {
+      if (navigator.clipboard && window.isSecureContext) {
+        try {
+          await navigator.clipboard.writeText(text);
+          return;
+        } catch (error) {
+          fallbackCopyText(text);
+          return;
+        }
+      }
+      fallbackCopyText(text);
+    }
+
+    document.querySelectorAll('.command-box').forEach((box) => {
+      const button = box.querySelector('.copy-btn');
+      const text = box.dataset.copy || box.querySelector('pre').textContent.trim();
+      button.addEventListener('click', async () => {
+        try {
+          await copyText(text);
+          button.textContent = 'Copied';
+          button.classList.add('copied');
+          window.setTimeout(() => {
+            button.textContent = 'Copy';
+            button.classList.remove('copied');
+          }, 1400);
+        } catch (error) {
+          button.textContent = 'Failed';
+          window.setTimeout(() => { button.textContent = 'Copy'; }, 1400);
+        }
+      });
+    });
+  </script>
 </body>
 </html>
