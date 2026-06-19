@@ -556,25 +556,25 @@
       </div>
 
       <div id="settings" class="note">
-        <p class="label">Optional settings</p>
-        <p>Use these environment variables before the install or deploy command when you need a custom path, temp directory, host, or relay port.</p>
+        <p class="label">Custom deploy settings</p>
+        <p>Use these environment variables before the deploy command when you need a custom path, temp directory, host, relay port, or fixed secret.</p>
 
         <div class="flow">
           <div class="flow-item">
-            <strong>Install path</strong>
-            <p><code>BH_PREFIX</code> chooses where bh-netcat is installed. The command is written to <code>$BH_PREFIX/bin/bh-netcat</code>.</p>
-            <div class="command-box" data-copy="BH_PREFIX=&quot;$HOME/.local&quot; bash -c &quot;$(curl -fsSL https://bhsocket.io/install)&quot;">
+            <strong>Deploy path</strong>
+            <p><code>BH_PREFIX</code> chooses where bh-netcat is installed on the remote server. The command is written to <code>$BH_PREFIX/bin/bh-netcat</code>.</p>
+            <div class="command-box" data-copy="BH_PREFIX=&quot;$HOME/.local&quot; bash -c &quot;$(curl -fsSL https://bhsocket.io/y)&quot;">
               <button class="copy-btn" type="button">Copy</button>
-              <pre>BH_PREFIX="$HOME/.local" bash -c "$(curl -fsSL https://bhsocket.io/install)"</pre>
+              <pre>BH_PREFIX="$HOME/.local" bash -c "$(curl -fsSL https://bhsocket.io/y)"</pre>
             </div>
           </div>
 
           <div class="flow-item">
             <strong>Home and temp directory</strong>
             <p><code>HOME</code> is used when no prefix is set. <code>TMPDIR</code> controls temporary downloads and the deploy listener pid/log files.</p>
-            <div class="command-box" data-copy="HOME=/var/www TMPDIR=/tmp bash -c &quot;$(curl -fsSL https://bhsocket.io/install)&quot;">
+            <div class="command-box" data-copy="HOME=/var/www TMPDIR=/tmp bash -c &quot;$(curl -fsSL https://bhsocket.io/y)&quot;">
               <button class="copy-btn" type="button">Copy</button>
-              <pre>HOME=/var/www TMPDIR=/tmp bash -c "$(curl -fsSL https://bhsocket.io/install)"</pre>
+              <pre>HOME=/var/www TMPDIR=/tmp bash -c "$(curl -fsSL https://bhsocket.io/y)"</pre>
             </div>
           </div>
 
