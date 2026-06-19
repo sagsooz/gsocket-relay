@@ -7,4 +7,4 @@ Disallow: /panel/password
 Disallow: /panel/telegram
 Disallow: /panel/token/
 
-Sitemap: https://bhsocket.io/sitemap.xml
+Sitemap: https://www.bhsocket.io/sitemap.xml

@@ -7,10 +7,10 @@
   <meta name="description" content="Install bh-netcat for BlackHat Socket, deploy authorized server listeners, and connect through the private bhsocket.io relay with saved dashboard secrets.">
   <meta name="keywords" content="bh-netcat, install bh-netcat, bh-netcat command, BlackHat Socket, bhsocket.io, private relay, remote server deploy">
   <meta name="robots" content="index, follow, max-image-preview:large">
-  <link rel="canonical" href="https://bhsocket.io/bh-netcat.html">
+  <link rel="canonical" href="https://www.bhsocket.io/bh-netcat.html">
   <link rel="sitemap" type="application/xml" href="/sitemap.xml">
   <meta property="og:type" content="article">
-  <meta property="og:url" content="https://bhsocket.io/bh-netcat.html">
+  <meta property="og:url" content="https://www.bhsocket.io/bh-netcat.html">
   <meta property="og:title" content="bh-netcat Install and Usage | BlackHat Socket">
   <meta property="og:description" content="Install bh-netcat locally, deploy authorized listeners, and connect through the private BlackHat Socket relay.">
   <meta property="og:site_name" content="BlackHat Socket">
@@ -23,12 +23,12 @@
     "@type": "TechArticle",
     "headline": "bh-netcat Install and Usage",
     "description": "How to install bh-netcat, deploy authorized BlackHat Socket listeners, and connect through the private bhsocket.io relay.",
-    "url": "https://bhsocket.io/bh-netcat.html",
-    "mainEntityOfPage": "https://bhsocket.io/bh-netcat.html",
+    "url": "https://www.bhsocket.io/bh-netcat.html",
+    "mainEntityOfPage": "https://www.bhsocket.io/bh-netcat.html",
     "publisher": {
       "@type": "Organization",
       "name": "BlackHat Socket",
-      "url": "https://bhsocket.io/"
+      "url": "https://www.bhsocket.io/"
     }
   }
   </script>
@@ -63,14 +63,14 @@
     <section id="install">
       <h2>Install bh-netcat</h2>
       <p>Use the install endpoint on your own workstation. This installs the client command only; it does not deploy a server listener.</p>
-      <div class="cmd"><pre>bash -c "$(curl -fsSL https://bhsocket.io/install)"</pre></div>
-      <div class="cmd"><pre>powershell -ExecutionPolicy Bypass -Command "iwr https://bhsocket.io/install.ps1 -UseB | iex"</pre></div>
+      <div class="cmd"><pre>bash -c "$(curl -fsSL https://www.bhsocket.io/install)"</pre></div>
+      <div class="cmd"><pre>powershell -ExecutionPolicy Bypass -Command "iwr https://www.bhsocket.io/install.ps1 -UseB | iex"</pre></div>
     </section>
 
     <section id="deploy">
       <h2>Deploy a server listener</h2>
       <p>Create an account in the BlackHat Socket panel, copy your private tokenized deploy command, and run it on an authorized server. The server record is saved automatically to your dashboard.</p>
-      <div class="cmd"><pre>BH_TOKEN="YOUR_PANEL_TOKEN" bash -c "$(curl -fsSL https://bhsocket.io/y)"</pre></div>
+      <div class="cmd"><pre>BH_TOKEN="YOUR_PANEL_TOKEN" bash -c "$(curl -fsSL https://www.bhsocket.io/y)"</pre></div>
     </section>
 
     <section id="connect">
