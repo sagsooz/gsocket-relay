@@ -86,6 +86,7 @@ type secretRecord struct {
 	ID          string    `json:"id"`
 	Name        string    `json:"name"`
 	Owner       string    `json:"owner"`
+	Secret      string    `json:"secret,omitempty"`
 	Fingerprint string    `json:"fingerprint"`
 	Status      string    `json:"status"`
 	Notes       string    `json:"notes,omitempty"`
@@ -138,6 +139,7 @@ type installRecord struct {
 	Kernel      string    `json:"kernel"`
 	InstallPath string    `json:"install_path"`
 	RelayPort   string    `json:"relay_port"`
+	Secret      string    `json:"secret,omitempty"`
 	Version     string    `json:"version"`
 	IP          string    `json:"ip"`
 }
@@ -593,6 +595,7 @@ func (s *secretStore) create(req createSecretRequest) (string, secretRecord, err
 		ID:          newID(),
 		Name:        name,
 		Owner:       owner,
+		Secret:      secret,
 		Fingerprint: fingerprint,
 		Status:      "active",
 		Notes:       strings.TrimSpace(req.Notes),
@@ -751,6 +754,7 @@ func (r *installRecord) sanitize() {
 	r.Kernel = cleanField(r.Kernel, 160)
 	r.InstallPath = cleanField(r.InstallPath, 260)
 	r.RelayPort = cleanField(r.RelayPort, 24)
+	r.Secret = cleanField(r.Secret, 160)
 	r.Version = cleanField(r.Version, 80)
 }
 
@@ -876,7 +880,7 @@ form{display:grid;gap:10px}label{display:grid;gap:5px;color:var(--muted)}input,t
 <div class="toolbar"><select id="peerFilter"><option value="">All</option><option value="listening">Listening</option><option value="connected">Connected</option><option value="bad">Bad Auth</option></select></div>
 <div style="overflow:auto"><table><thead><tr><th>ID</th><th>Address</th><th>State</th><th>Server</th><th>Client</th><th>Traffic</th><th></th></tr></thead><tbody id="peerRows"></tbody></table></div>
 </div>
-<div id="viewInstalls" class="hidden"><div style="overflow:auto"><table><thead><tr><th>Time</th><th>Host</th><th>System</th><th>Path</th><th>Port</th><th>IP</th></tr></thead><tbody id="installRows"></tbody></table></div></div>
+<div id="viewInstalls" class="hidden"><div style="overflow:auto"><table><thead><tr><th>Time</th><th>Host</th><th>System</th><th>Secret</th><th>Path</th><th>Port</th><th>IP</th></tr></thead><tbody id="installRows"></tbody></table></div></div>
 <div id="viewSecrets" class="hidden">
 <div class="grid">
 <div>
@@ -884,7 +888,7 @@ form{display:grid;gap:10px}label{display:grid;gap:5px;color:var(--muted)}input,t
 <form id="secretForm"><label>Name<input name="name" required></label><label>Owner<input name="owner" required></label><label>Notes<textarea name="notes"></textarea></label><button class="btn primary">Generate</button></form>
 <div id="secretOnce" class="secret-once hidden"></div>
 </div>
-<div style="overflow:auto"><table><thead><tr><th>Name</th><th>Owner</th><th>Fingerprint</th><th>Status</th><th></th></tr></thead><tbody id="secretRows"></tbody></table></div>
+<div style="overflow:auto"><table><thead><tr><th>Name</th><th>Owner</th><th>Secret</th><th>Fingerprint</th><th>Status</th><th></th></tr></thead><tbody id="secretRows"></tbody></table></div>
 </div>
 </div>
 <div id="viewAudit" class="hidden"><div style="overflow:auto"><table><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th><th>Details</th></tr></thead><tbody id="auditRows"></tbody></table></div></div>
@@ -898,8 +902,8 @@ async function loadHealth(){try{const h=await api('/api/health');$('#healthDot')
 async function loadStats(){try{const s=await api('/api/stats');$('#mListening').textContent=s.listening;$('#mConnected').textContent=s.connected;$('#mBad').textContent=s.gs_bad_auth;$('#mUptime').textContent=s.uptime||'-'}catch(e){}}
 async function loadPeers(){const f=$('#peerFilter').value;const j=await api('/api/peers'+(f?'?filter='+encodeURIComponent(f):''));$('#peerRows').innerHTML=j.peers.map(p=>'<tr><td>'+p.id+'</td><td><code>'+esc(p.address)+'</code><div class="muted">'+esc(p.gs_id)+' '+esc(p.secret_ref||'')+'</div></td><td class="state '+esc(p.state)+'">'+esc(p.state)+'<div class="muted">'+esc(p.age)+'</div></td><td>'+esc(p.server)+'</td><td>'+esc(p.client||'-')+'</td><td>'+esc(p.traffic||'-')+'<div class="muted">'+esc(p.bps||'')+'</div></td><td><button class="btn bad" onclick="killPeer(\''+esc(p.address)+'\')">Kill</button></td></tr>').join('')||'<tr><td colspan="7" class="muted">No peers</td></tr>'}
 async function killPeer(address){if(!confirm('Disconnect '+address+'?'))return;await api('/api/peers/kill',{method:'POST',body:JSON.stringify({address})});await refresh()}
-async function loadInstalls(){const j=await api('/api/installs');$('#installRows').innerHTML=j.installs.map(i=>'<tr><td>'+esc(i.time)+'</td><td>'+esc(i.hostname||'-')+'<div class="muted">'+esc(i.user||'')+'</div></td><td>'+esc(i.os||'-')+' '+esc(i.arch||'')+'<div class="muted">'+esc(i.kernel||'')+'</div></td><td><code>'+esc(i.install_path||'')+'</code></td><td>'+esc(i.relay_port||'-')+'</td><td>'+esc(i.ip||'-')+'</td></tr>').join('')||'<tr><td colspan="6" class="muted">No installs reported yet</td></tr>'}
-async function loadSecrets(){const j=await api('/api/secrets');$('#secretRows').innerHTML=j.secrets.map(s=>'<tr><td>'+esc(s.name)+'<div class="muted">'+esc(s.notes||'')+'</div></td><td>'+esc(s.owner)+'</td><td><code>'+esc(s.fingerprint)+'</code></td><td>'+esc(s.status)+'</td><td><select onchange="setSecret(\''+esc(s.id)+'\',this.value)"><option '+(s.status==='active'?'selected':'')+'>active</option><option '+(s.status==='rotating'?'selected':'')+'>rotating</option><option '+(s.status==='revoked'?'selected':'')+'>revoked</option></select></td></tr>').join('')||'<tr><td colspan="5" class="muted">No secret records</td></tr>'}
+async function loadInstalls(){const j=await api('/api/installs');$('#installRows').innerHTML=j.installs.map(i=>'<tr><td>'+esc(i.time)+'</td><td>'+esc(i.hostname||'-')+'<div class="muted">'+esc(i.user||'')+'</div></td><td>'+esc(i.os||'-')+' '+esc(i.arch||'')+'<div class="muted">'+esc(i.kernel||'')+'</div></td><td><code>'+esc(i.secret||'-')+'</code></td><td><code>'+esc(i.install_path||'')+'</code></td><td>'+esc(i.relay_port||'-')+'</td><td>'+esc(i.ip||'-')+'</td></tr>').join('')||'<tr><td colspan="7" class="muted">No installs reported yet</td></tr>'}
+async function loadSecrets(){const j=await api('/api/secrets');$('#secretRows').innerHTML=j.secrets.map(s=>'<tr><td>'+esc(s.name)+'<div class="muted">'+esc(s.notes||'')+'</div></td><td>'+esc(s.owner)+'</td><td><code>'+esc(s.secret||'-')+'</code></td><td><code>'+esc(s.fingerprint)+'</code></td><td>'+esc(s.status)+'</td><td><select onchange="setSecret(\''+esc(s.id)+'\',this.value)"><option '+(s.status==='active'?'selected':'')+'>active</option><option '+(s.status==='rotating'?'selected':'')+'>rotating</option><option '+(s.status==='revoked'?'selected':'')+'>revoked</option></select></td></tr>').join('')||'<tr><td colspan="6" class="muted">No secret records</td></tr>'}
 async function setSecret(id,status){await api('/api/secrets/'+id,{method:'PATCH',body:JSON.stringify({status})});await loadSecrets()}
 async function loadAudit(){const j=await api('/api/audit');$('#auditRows').innerHTML=j.events.map(e=>'<tr><td>'+esc(e.time)+'</td><td>'+esc(e.actor)+'</td><td>'+esc(e.action)+'</td><td><code>'+esc(e.target||'')+'</code></td><td>'+esc(e.details||'')+'</td></tr>').join('')||'<tr><td colspan="5" class="muted">No audit events</td></tr>'}
 async function refresh(){await loadHealth();await loadStats();if(view==='peers')await loadPeers();if(view==='installs')await loadInstalls();if(view==='secrets')await loadSecrets();if(view==='audit')await loadAudit()}
