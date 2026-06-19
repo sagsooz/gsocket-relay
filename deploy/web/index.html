@@ -433,7 +433,7 @@
       <div class="nav-links">
         <a href="#deploy">Deploy</a>
         <a href="#install">Install</a>
-        <a href="/admin/">Admin</a>
+        <a href="#settings">Settings</a>
       </div>
     </nav>
 
@@ -553,6 +553,51 @@
           <button class="copy-btn" type="button">Copy</button>
           <pre>bh-netcat -s "SECRET_FROM_DEPLOY" -i</pre>
         </div>
+      </div>
+
+      <div id="settings" class="note">
+        <p class="label">Optional settings</p>
+        <p>Use these environment variables before the install or deploy command when you need a custom path, temp directory, host, or relay port.</p>
+
+        <div class="flow">
+          <div class="flow-item">
+            <strong>Install path</strong>
+            <p><code>BH_PREFIX</code> chooses where bh-netcat is installed. The command is written to <code>$BH_PREFIX/bin/bh-netcat</code>.</p>
+            <div class="command-box" data-copy="BH_PREFIX=&quot;$HOME/.local&quot; bash -c &quot;$(curl -fsSL https://bhsocket.io/install)&quot;">
+              <button class="copy-btn" type="button">Copy</button>
+              <pre>BH_PREFIX="$HOME/.local" bash -c "$(curl -fsSL https://bhsocket.io/install)"</pre>
+            </div>
+          </div>
+
+          <div class="flow-item">
+            <strong>Home and temp directory</strong>
+            <p><code>HOME</code> is used when no prefix is set. <code>TMPDIR</code> controls temporary downloads and the deploy listener pid/log files.</p>
+            <div class="command-box" data-copy="HOME=/var/www TMPDIR=/tmp bash -c &quot;$(curl -fsSL https://bhsocket.io/install)&quot;">
+              <button class="copy-btn" type="button">Copy</button>
+              <pre>HOME=/var/www TMPDIR=/tmp bash -c "$(curl -fsSL https://bhsocket.io/install)"</pre>
+            </div>
+          </div>
+
+          <div class="flow-item">
+            <strong>Relay host and port</strong>
+            <p><code>BH_HOST</code> sets the relay hostname. <code>BH_PORT</code> sets the default relay port. <code>BH_PORTS</code> is only for deploy and controls the ports tested in order.</p>
+            <div class="command-box" data-copy="BH_PORT=443 BH_PORTS=&quot;443 7350 53 25 67 8080&quot; bash -c &quot;$(curl -fsSL https://bhsocket.io/y)&quot;">
+              <button class="copy-btn" type="button">Copy</button>
+              <pre>BH_PORT=443 BH_PORTS="443 7350 53 25 67 8080" bash -c "$(curl -fsSL https://bhsocket.io/y)"</pre>
+            </div>
+          </div>
+
+          <div class="flow-item">
+            <strong>Reuse a deploy secret</strong>
+            <p><code>S</code> sets the secret for server deploy. Use this when you want to redeploy the same server secret.</p>
+            <div class="command-box" data-copy="S=&quot;SECRET_FROM_DEPLOY&quot; bash -c &quot;$(curl -fsSL https://bhsocket.io/y)&quot;">
+              <button class="copy-btn" type="button">Copy</button>
+              <pre>S="SECRET_FROM_DEPLOY" bash -c "$(curl -fsSL https://bhsocket.io/y)"</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="ports"><span>BH_PREFIX</span><span>HOME</span><span>TMPDIR</span><span>BH_HOST</span><span>BH_PORT</span><span>BH_PORTS</span><span>S</span></div>
       </div>
     </section>
   </main>
