@@ -130,15 +130,34 @@ if [[ ! -x "\$BH_REAL" ]]; then
   exit 127
 fi
 
+export GSOCKET_HOST="\$BH_SOCKET_HOST"
+export GSOCKET_PORT="\$BH_SOCKET_PORT"
+export GS_HOST="\$BH_SOCKET_HOST"
+export GS_PORT="\$BH_SOCKET_PORT"
+
 if [[ -n "\${BASH_VERSION:-}" ]]; then
-  exec -a bh-netcat env GS_HOST="\$BH_SOCKET_HOST" GS_PORT="\$BH_SOCKET_PORT" "\$BH_REAL" "\$@"
+  exec -a bh-netcat "\$BH_REAL" "\$@"
 fi
 
-exec env GS_HOST="\$BH_SOCKET_HOST" GS_PORT="\$BH_SOCKET_PORT" "\$BH_REAL" "\$@"
+exec "\$BH_REAL" "\$@"
 EOF
   chmod 0755 "$bin_path"
 
+  if [[ "$(id -u)" = "0" && "$prefix" = "/usr/local" && -d /usr/bin && -w /usr/bin ]]; then
+    if [[ ! -e /usr/bin/${BH_NAME} || -L /usr/bin/${BH_NAME} ]]; then
+      ln -sfn "$bin_path" "/usr/bin/${BH_NAME}"
+    fi
+  fi
+
+  "$bin_path" -g >/dev/null
+
   say "Installed ${bin_path}"
+  if command -v "$BH_NAME" >/dev/null 2>&1; then
+    say "Command path: $(command -v "$BH_NAME")"
+  else
+    say "Command path: ${bin_path}"
+    say "Add ${prefix}/bin to PATH if ${BH_NAME} is not found in a new shell."
+  fi
   say ""
   say "Quick start:"
   say "  SECRET=\"\$(${BH_NAME} -g)\""
