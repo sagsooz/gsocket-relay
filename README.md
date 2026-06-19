@@ -4,6 +4,8 @@ BH Socket Relay is the private relay deployment for `bhsocket.io`.
 
 This fork keeps the upstream Global Socket relay protocol compatible, while branding and deployment defaults are adjusted for BH Socket infrastructure.
 
+Public client install page: `https://bhsocket.io/y`
+
 Upstream projects:
 
 - Relay: https://github.com/hackerschoice/gsocket-relay

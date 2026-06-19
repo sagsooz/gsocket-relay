@@ -1,0 +1,155 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+BH_HOST="${BH_HOST:-bhsocket.io}"
+BH_PORT="${BH_PORT:-7350}"
+BH_BASE_URL="${BH_BASE_URL:-https://bhsocket.io}"
+BH_NAME="bh-netcat"
+BH_TMP=""
+
+say() {
+  printf '%s\n' "$*"
+}
+
+fail() {
+  printf 'bh-netcat install failed: %s\n' "$*" >&2
+  exit 1
+}
+
+need() {
+  command -v "$1" >/dev/null 2>&1 || fail "missing required command: $1"
+}
+
+pick_prefix() {
+  if [[ -n "${BH_PREFIX:-}" ]]; then
+    printf '%s\n' "$BH_PREFIX"
+    return
+  fi
+
+  if [[ "$(id -u)" = "0" ]]; then
+    printf '/usr/local\n'
+    return
+  fi
+
+  printf '%s/.local\n' "$HOME"
+}
+
+detect_package() {
+  local os arch
+  os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+  arch="$(uname -m | tr '[:upper:]' '[:lower:]')"
+
+  case "$os:$arch" in
+    linux:x86_64|linux:amd64)
+      printf 'bh-netcat_x86_64-linux.tar.gz\n'
+      ;;
+    linux:aarch64|linux:arm64)
+      printf 'bh-netcat_aarch64-linux.tar.gz\n'
+      ;;
+    linux:armv6l|linux:armv7l|linux:arm)
+      printf 'bh-netcat_arm-linux.tar.gz\n'
+      ;;
+    darwin:x86_64)
+      printf 'bh-netcat_x86_64-osx.tar.gz\n'
+      ;;
+    *)
+      fail "unsupported platform: ${os}/${arch}"
+      ;;
+  esac
+}
+
+download() {
+  local url="$1" out="$2"
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL "$url" -o "$out"
+    return
+  fi
+
+  if command -v wget >/dev/null 2>&1; then
+    wget -qO "$out" "$url"
+    return
+  fi
+
+  fail "missing required command: curl or wget"
+}
+
+remove_install() {
+  local prefix="$1"
+  rm -f "${prefix}/bin/${BH_NAME}"
+  rm -f "${prefix}/lib/bhsocket/${BH_NAME}.real"
+  say "Removed ${prefix}/bin/${BH_NAME}"
+}
+
+cleanup() {
+  if [[ -n "$BH_TMP" ]]; then
+    rm -rf "$BH_TMP"
+  fi
+}
+
+install_client() {
+  local prefix="$1" package tmp archive extracted real_path bin_path lib_path
+  package="$(detect_package)"
+  tmp="$(mktemp -d)"
+  BH_TMP="$tmp"
+  trap cleanup EXIT
+
+  archive="${tmp}/${package}"
+  download "${BH_BASE_URL%/}/bin/${package}" "$archive"
+  tar -xzf "$archive" -C "$tmp"
+
+  extracted="$(find "$tmp" -type f -perm -111 ! -name "${package}" | head -n 1)"
+  [[ -n "$extracted" ]] || fail "downloaded package did not contain an executable"
+
+  bin_path="${prefix}/bin/${BH_NAME}"
+  lib_path="${prefix}/lib/bhsocket"
+  real_path="${lib_path}/${BH_NAME}.real"
+
+  mkdir -p "$prefix/bin" "$lib_path"
+  install -m 0755 "$extracted" "$real_path"
+
+  cat >"$bin_path" <<EOF
+#!/usr/bin/env bash
+BH_SOCKET_HOST="\${BH_SOCKET_HOST:-${BH_HOST}}"
+BH_SOCKET_PORT="\${BH_SOCKET_PORT:-${BH_PORT}}"
+BH_REAL="\${BH_REAL:-${real_path}}"
+
+if [[ ! -x "\$BH_REAL" ]]; then
+  printf 'bh-netcat: real executable not found: %s\\n' "\$BH_REAL" >&2
+  exit 127
+fi
+
+if [[ -n "\${BASH_VERSION:-}" ]]; then
+  exec -a bh-netcat env GS_HOST="\$BH_SOCKET_HOST" GS_PORT="\$BH_SOCKET_PORT" "\$BH_REAL" "\$@"
+fi
+
+exec env GS_HOST="\$BH_SOCKET_HOST" GS_PORT="\$BH_SOCKET_PORT" "\$BH_REAL" "\$@"
+EOF
+  chmod 0755 "$bin_path"
+
+  say "Installed ${bin_path}"
+  say ""
+  say "Quick start:"
+  say "  SECRET=\"\$(${BH_NAME} -g)\""
+  say "  ${BH_NAME} -s \"\$SECRET\" -l"
+  say "  ${BH_NAME} -s \"\$SECRET\""
+}
+
+main() {
+  need uname
+  need tar
+  need find
+  need install
+  need mktemp
+
+  local prefix
+  prefix="$(pick_prefix)"
+
+  if [[ "${BH_UNINSTALL:-0}" = "1" ]]; then
+    remove_install "$prefix"
+    return
+  fi
+
+  install_client "$prefix"
+}
+
+main "$@"

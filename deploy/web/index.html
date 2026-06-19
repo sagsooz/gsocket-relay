@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BH Socket</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0c1117;
+      --panel: #111a24;
+      --panel-2: #162232;
+      --text: #eef4f7;
+      --muted: #9fb0bc;
+      --line: #243446;
+      --accent: #18c29c;
+      --accent-2: #d9a441;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at 75% 10%, rgba(24, 194, 156, 0.15), transparent 28rem),
+        linear-gradient(135deg, #0c1117 0%, #101923 52%, #121820 100%);
+      color: var(--text);
+    }
+
+    main {
+      width: min(1120px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: 56px 0 42px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(320px, 440px);
+      gap: 40px;
+      align-items: center;
+      min-height: 70vh;
+    }
+
+    .mark {
+      display: inline-grid;
+      place-items: center;
+      width: 54px;
+      height: 54px;
+      border: 1px solid rgba(24, 194, 156, 0.42);
+      border-radius: 8px;
+      background: rgba(24, 194, 156, 0.09);
+      color: var(--accent);
+      font-weight: 800;
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+
+    h1 {
+      margin: 28px 0 16px;
+      max-width: 760px;
+      font-size: clamp(42px, 7vw, 88px);
+      line-height: 0.95;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      max-width: 660px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 20px;
+      line-height: 1.6;
+    }
+
+    .command {
+      margin-top: 34px;
+      padding: 16px 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #080d12;
+      overflow-x: auto;
+      white-space: nowrap;
+      font: 15px/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      color: #d9fff3;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: linear-gradient(180deg, rgba(22, 34, 50, 0.95), rgba(17, 26, 36, 0.95));
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.22);
+      overflow: hidden;
+    }
+
+    .panel header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    .status::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 16px rgba(24, 194, 156, 0.8);
+    }
+
+    .panel-body { padding: 22px; }
+
+    .label {
+      margin: 0 0 10px;
+      color: var(--accent-2);
+      font-size: 13px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    pre {
+      margin: 0;
+      padding: 16px;
+      overflow-x: auto;
+      border-radius: 8px;
+      background: #071015;
+      border: 1px solid #1c2d3b;
+      color: #eef4f7;
+      font: 14px/1.65 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    .meta {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-top: 18px;
+    }
+
+    .metric {
+      min-width: 0;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(12, 17, 23, 0.55);
+    }
+
+    .metric span {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .metric strong {
+      display: block;
+      overflow-wrap: anywhere;
+      font-size: 17px;
+      color: var(--text);
+    }
+
+    section {
+      padding-top: 34px;
+      border-top: 1px solid rgba(36, 52, 70, 0.7);
+    }
+
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .step {
+      min-width: 0;
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(17, 26, 36, 0.72);
+    }
+
+    .step b {
+      display: block;
+      margin-bottom: 10px;
+      color: var(--accent);
+      font-size: 15px;
+    }
+
+    .step code {
+      display: block;
+      overflow-wrap: anywhere;
+      color: var(--text);
+      font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    @media (max-width: 860px) {
+      main { width: min(100% - 28px, 1120px); padding-top: 34px; }
+      .hero { grid-template-columns: 1fr; min-height: auto; }
+      .steps { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 520px) {
+      h1 { font-size: 42px; }
+      .lead { font-size: 17px; }
+      .meta { grid-template-columns: 1fr; }
+      .command { font-size: 13px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="hero">
+      <div>
+        <div class="mark">BH</div>
+        <h1>BH Socket</h1>
+        <p class="lead">Private relay access for internal BH infrastructure, served from bhsocket.io.</p>
+        <div class="command">bash -c "$(curl -fsSL https://bhsocket.io/y)"</div>
+      </div>
+
+      <aside class="panel" aria-label="BH Socket quick start">
+        <header>
+          <span>Relay endpoint</span>
+          <span class="status">Online</span>
+        </header>
+        <div class="panel-body">
+          <p class="label">Quick Start</p>
+          <pre>bash -c "$(curl -fsSL https://bhsocket.io/y)"
+
+SECRET="$(bh-netcat -g)"
+bh-netcat -s "$SECRET" -l
+bh-netcat -s "$SECRET"</pre>
+
+          <div class="meta">
+            <div class="metric">
+              <span>Host</span>
+              <strong>bhsocket.io</strong>
+            </div>
+            <div class="metric">
+              <span>Port</span>
+              <strong>7350</strong>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <section aria-label="Usage">
+      <div class="steps">
+        <div class="step">
+          <b>Install</b>
+          <code>bash -c "$(curl -fsSL https://bhsocket.io/y)"</code>
+        </div>
+        <div class="step">
+          <b>Listen</b>
+          <code>SECRET="$(bh-netcat -g)"<br>bh-netcat -s "$SECRET" -l</code>
+        </div>
+        <div class="step">
+          <b>Connect</b>
+          <code>bh-netcat -s "$SECRET"</code>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
