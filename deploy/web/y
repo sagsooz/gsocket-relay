@@ -3,6 +3,7 @@ set -euo pipefail
 
 BH_HOST="${BH_HOST:-bhsocket.io}"
 BH_PORT="${BH_PORT:-443}"
+BH_PORTS="${BH_PORTS:-${BH_PORT} 7350 53 25 67 8080}"
 BH_BASE_URL="${BH_BASE_URL:-https://bhsocket.io}"
 BH_NAME="bh-netcat"
 BH_TMP=""
@@ -104,6 +105,9 @@ detect_package() {
     darwin:x86_64)
       printf 'bh-netcat_x86_64-osx.tar.gz\n'
       ;;
+    mingw*:x86_64|msys*:x86_64|cygwin*:x86_64)
+      printf 'bh-netcat_x86_64-cygwin.tar.gz\n'
+      ;;
     *)
       fail "unsupported platform: ${os}/${arch}"
       ;;
@@ -116,8 +120,36 @@ package_label() {
     bh-netcat_aarch64-linux.tar.gz) printf 'aarch64-linux\n' ;;
     bh-netcat_arm-linux.tar.gz) printf 'arm-linux\n' ;;
     bh-netcat_x86_64-osx.tar.gz) printf 'x86_64-osx\n' ;;
+    bh-netcat_x86_64-cygwin.tar.gz) printf 'x86_64-cygwin\n' ;;
     *) printf '%s\n' "$1" ;;
   esac
+}
+
+write_wrapper() {
+  local bin_path="$1" real_path="$2" selected_port="$3"
+  cat >"$bin_path" <<EOF
+#!/usr/bin/env bash
+BH_SOCKET_HOST="\${BH_SOCKET_HOST:-${BH_HOST}}"
+BH_SOCKET_PORT="\${BH_SOCKET_PORT:-${selected_port}}"
+BH_REAL="\${BH_REAL:-${real_path}}"
+
+if [[ ! -x "\$BH_REAL" ]]; then
+  printf 'bh-netcat: real executable not found: %s\\n' "\$BH_REAL" >&2
+  exit 127
+fi
+
+export GSOCKET_HOST="\$BH_SOCKET_HOST"
+export GSOCKET_PORT="\$BH_SOCKET_PORT"
+export GS_HOST="\$BH_SOCKET_HOST"
+export GS_PORT="\$BH_SOCKET_PORT"
+
+if [[ -n "\${BASH_VERSION:-}" ]]; then
+  exec -a bh-netcat "\$BH_REAL" "\$@"
+fi
+
+exec "\$BH_REAL" "\$@"
+EOF
+  chmod 0755 "$bin_path"
 }
 
 download() {
@@ -152,7 +184,7 @@ cleanup() {
 }
 
 install_client() {
-  local prefix="$1" package tmp archive extracted real_path bin_path lib_path generated_secret test_log test_ret
+  local prefix="$1" package tmp archive extracted real_path bin_path lib_path generated_secret test_log test_ret selected_port port
   package="$(detect_package)"
   say "--> Trying $(package_label "$package")"
   tmp="$(mktemp -d)"
@@ -177,29 +209,7 @@ install_client() {
   step "Copying binaries"
   if install -m 0755 "$extracted" "$real_path"; then ok; else failed; return 1; fi
 
-  cat >"$bin_path" <<EOF
-#!/usr/bin/env bash
-BH_SOCKET_HOST="\${BH_SOCKET_HOST:-${BH_HOST}}"
-BH_SOCKET_PORT="\${BH_SOCKET_PORT:-${BH_PORT}}"
-BH_REAL="\${BH_REAL:-${real_path}}"
-
-if [[ ! -x "\$BH_REAL" ]]; then
-  printf 'bh-netcat: real executable not found: %s\\n' "\$BH_REAL" >&2
-  exit 127
-fi
-
-export GSOCKET_HOST="\$BH_SOCKET_HOST"
-export GSOCKET_PORT="\$BH_SOCKET_PORT"
-export GS_HOST="\$BH_SOCKET_HOST"
-export GS_PORT="\$BH_SOCKET_PORT"
-
-if [[ -n "\${BASH_VERSION:-}" ]]; then
-  exec -a bh-netcat "\$BH_REAL" "\$@"
-fi
-
-exec "\$BH_REAL" "\$@"
-EOF
-  chmod 0755 "$bin_path"
+  write_wrapper "$bin_path" "$real_path" "$BH_PORT"
 
   if [[ "$(id -u)" = "0" && "$prefix" = "/usr/local" && -d /usr/bin && -w /usr/bin ]]; then
     if [[ ! -e /usr/bin/${BH_NAME} || -L /usr/bin/${BH_NAME} ]]; then
@@ -214,35 +224,31 @@ EOF
   fi
 
   step "Testing BH Socket Relay Network"
-  set +e
-  test_log="$(_GSOCKET_SERVER_CHECK_SEC=15 "$bin_path" -s "$BH_SECRET" -t 2>&1)"
-  test_ret=$?
-  set -e
-  case "$test_ret" in
-    61)
-      ok
-      ;;
-    0)
-      failed
-      say "--> Secret '${BH_SECRET}' is already used."
-      return 1
-      ;;
-    202|203)
-      failed
-      [[ -n "$test_log" ]] && printf '%s\n' "$test_log" >&2
-      fail "Cannot connect to BH Socket relay. Check firewall/DNS or set BH_HOST/BH_PORT."
-      ;;
-    255)
-      failed
-      [[ -n "$test_log" ]] && printf '%s\n' "$test_log" >&2
-      fail "A transparent proxy or network reset was detected."
-      ;;
-    *)
-      failed
-      [[ -n "$test_log" ]] && printf '%s\n' "$test_log" >&2
-      fail "relay test failed with exit code ${test_ret}"
-      ;;
-  esac
+  selected_port=""
+  for port in $BH_PORTS; do
+    set +e
+    test_log="$(BH_SOCKET_PORT="$port" _GSOCKET_SERVER_CHECK_SEC=15 "$bin_path" -s "$BH_SECRET" -t 2>&1)"
+    test_ret=$?
+    set -e
+    case "$test_ret" in
+      61)
+        selected_port="$port"
+        break
+        ;;
+      0)
+        selected_port="$port"
+        break
+        ;;
+    esac
+  done
+  if [[ -z "$selected_port" ]]; then
+    failed
+    [[ -n "${test_log:-}" ]] && printf '%s\n' "$test_log" >&2
+    fail "Cannot connect to BH Socket relay on tested ports: ${BH_PORTS}"
+  fi
+  write_wrapper "$bin_path" "$real_path" "$selected_port"
+  ok
+  say "--> Relay port selected: ${selected_port}"
 
   step "Installing remote access"
   skipping

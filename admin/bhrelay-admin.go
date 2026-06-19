@@ -477,7 +477,7 @@ func parsePeers(raw string, secrets []secretRecord) []peer {
 			p.BPS = strings.TrimSpace(m[11])
 		}
 		for _, rec := range secrets {
-			if strings.EqualFold(rec.Fingerprint, fingerprintShort(p.Address)) {
+			if strings.EqualFold(rec.Fingerprint, p.Address) || strings.EqualFold(rec.Fingerprint, fingerprintShort(p.Address)) {
 				p.SecretRef = rec.Name
 				break
 			}
@@ -529,12 +529,15 @@ func (s *secretStore) create(req createSecretRequest) (string, secretRecord, err
 		return "", secretRecord{}, err
 	}
 	now := time.Now().UTC()
-	sum := sha256.Sum256([]byte(secret))
+	fingerprint, err := secretRelayAddress(secret)
+	if err != nil {
+		return "", secretRecord{}, err
+	}
 	rec := secretRecord{
 		ID:          newID(),
 		Name:        name,
 		Owner:       owner,
-		Fingerprint: hex.EncodeToString(sum[:])[:24],
+		Fingerprint: fingerprint,
 		Status:      "active",
 		Notes:       strings.TrimSpace(req.Notes),
 		CreatedAt:   now,
@@ -601,6 +604,31 @@ func randomSecret() (string, error) {
 		return "", err
 	}
 	return "bh_" + base64.RawURLEncoding.EncodeToString(buf), nil
+}
+
+func secretRelayAddress(secret string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+	defer cancel()
+
+	path := env("BH_ADMIN_BH_NETCAT", "/usr/local/bin/bh-netcat")
+	cmd := exec.CommandContext(ctx, path, "-s", secret, "-t")
+	cmd.Env = append(os.Environ(), "_GSOCKET_SERVER_CHECK_SEC=8")
+	out, err := cmd.CombinedOutput()
+	raw := string(out)
+	if ctx.Err() != nil {
+		return "", ctx.Err()
+	}
+	if err != nil {
+		var exitErr *exec.ExitError
+		if !errors.As(err, &exitErr) || exitErr.ExitCode() != 61 {
+			return "", fmt.Errorf("derive relay address: %w: %s", err, strings.TrimSpace(raw))
+		}
+	}
+	m := regexp.MustCompile(`\b[0-9a-fA-F]{32}\b`).FindString(raw)
+	if m == "" {
+		return "", fmt.Errorf("derive relay address: no address in output: %s", strings.TrimSpace(raw))
+	}
+	return strings.ToLower(m), nil
 }
 
 func newID() string {

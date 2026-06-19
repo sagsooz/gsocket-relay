@@ -48,6 +48,7 @@ and browse to `http://127.0.0.1:8730`.
 - `BH_ADMIN_CLI_HOST`: reserved for future use; the current bundled `gsrn_cli`
   release only supports localhost reliably
 - `BH_ADMIN_CLI_PORT`: relay CLI port, default `48001`
+- `BH_ADMIN_BH_NETCAT`: path to `bh-netcat`, default `/usr/local/bin/bh-netcat`
 - `BH_ADMIN_DATA_DIR`: state directory, default `/var/lib/bhsocket-admin`
 - `BH_ADMIN_USER`: required username
 - `BH_ADMIN_PASSWORD`: required password
