@@ -367,7 +367,7 @@ func (s *server) runCLI(ctx context.Context, command string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
 
-	args := []string{"-d", s.cfg.CLIHost, "-p", s.cfg.CLIPort}
+	args := []string{"-p", s.cfg.CLIPort}
 	cmd := exec.CommandContext(ctx, s.cfg.CLIPath, args...)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -384,7 +384,8 @@ func (s *server) runCLI(ctx context.Context, command string) (string, error) {
 	if err := cmd.Start(); err != nil {
 		return "", fmt.Errorf("start %s: %w", s.cfg.CLIPath, err)
 	}
-	_, _ = io.WriteString(stdin, command+"\nquit\n")
+	_, _ = io.WriteString(stdin, command+"\n")
+	time.Sleep(900 * time.Millisecond)
 	_ = stdin.Close()
 
 	outBytes, _ := io.ReadAll(outPipe)
