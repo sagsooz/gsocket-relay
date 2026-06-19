@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /api/
+Disallow: /panel/logout
+Disallow: /panel/password
+Disallow: /panel/telegram
+Disallow: /panel/token/
+
+Sitemap: https://bhsocket.io/sitemap.xml

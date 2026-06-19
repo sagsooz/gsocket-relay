@@ -3,7 +3,40 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>BlackHat Socket</title>
+  <title>BlackHat Socket | Private bh-netcat Relay and Deploy Panel</title>
+  <meta name="description" content="BlackHat Socket provides a private bh-netcat relay, server deploy command, local client installer, user dashboard, and managed server secrets for authorized internal operations.">
+  <meta name="keywords" content="bh-netcat, BlackHat Socket, bhsocket, private relay, relay network, deploy server, remote access, server secret dashboard">
+  <meta name="robots" content="index, follow, max-image-preview:large">
+  <link rel="canonical" href="https://bhsocket.io/">
+  <link rel="alternate" href="https://bhsocket.io/" hreflang="en">
+  <link rel="sitemap" type="application/xml" href="/sitemap.xml">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://bhsocket.io/">
+  <meta property="og:title" content="BlackHat Socket | Private bh-netcat Relay">
+  <meta property="og:description" content="Deploy authorized BH Socket listeners, install bh-netcat locally, and manage server secrets from a private user dashboard.">
+  <meta property="og:site_name" content="BlackHat Socket">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="BlackHat Socket | Private bh-netcat Relay">
+  <meta name="twitter:description" content="Private bh-netcat relay, deploy installer, local client installer, and user dashboard for managed server secrets.">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "BlackHat Socket",
+    "alternateName": "BH Socket",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "Linux, macOS, Windows",
+    "url": "https://bhsocket.io/",
+    "downloadUrl": "https://bhsocket.io/install",
+    "softwareHelp": "https://bhsocket.io/bh-netcat.html",
+    "description": "Private bh-netcat relay, server deploy workflow, local installer, and user dashboard for authorized internal server access.",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    }
+  }
+  </script>
   <style>
     :root {
       color-scheme: dark;
@@ -432,6 +465,7 @@
       <div class="brand"><span class="mark">BH</span><span>BlackHat Socket</span></div>
       <div class="nav-links">
         <a href="/panel/">Panel</a>
+        <a href="/bh-netcat.html">bh-netcat</a>
         <a href="#deploy">Deploy</a>
         <a href="#install">Install</a>
         <a href="#settings">Settings</a>
@@ -442,9 +476,10 @@
       <div>
         <p class="eyebrow">Private relay network</p>
         <h1>BlackHat Socket</h1>
-        <p class="lead">Deploy a BH Socket listener on a remote server, install bh-netcat locally, and connect back with the same secret through bhsocket.io.</p>
+        <p class="lead">Deploy a BH Socket listener on a remote server, install bh-netcat locally, and connect back with the same secret through bhsocket.io. Built for authorized internal server operations and private relay access.</p>
         <div class="hero-actions">
           <a class="btn primary" href="/panel/">Create Account</a>
+          <a class="btn" href="/bh-netcat.html">bh-netcat Guide</a>
           <a class="btn primary" href="#deploy">Deploy Server</a>
           <a class="btn" href="#install">Install Client</a>
         </div>
@@ -494,7 +529,23 @@
       <div class="flow">
         <div class="flow-item"><strong>1. Register</strong><p>Create your account from the BlackHat Socket panel.</p></div>
         <div class="flow-item"><strong>2. Copy deploy command</strong><p>Your deploy command includes a private token, so new servers are saved to your dashboard.</p></div>
-        <div class="flow-item"><strong>3. Connect later</strong><p>Open the panel anytime to copy the secret and connect command for each server.</p></div>
+          <div class="flow-item"><strong>3. Connect later</strong><p>Open the panel anytime to copy the secret and connect command for each server.</p></div>
+      </div>
+    </section>
+
+    <section id="bh-netcat" aria-label="bh-netcat overview">
+      <div class="section-head">
+        <div>
+          <h2>bh-netcat private relay client</h2>
+          <p>bh-netcat is the BlackHat Socket client command used to connect through the private bhsocket.io relay. Install it locally, copy a saved secret from your dashboard, and connect to authorized deployed servers.</p>
+        </div>
+        <a class="btn" href="/bh-netcat.html">Read bh-netcat guide</a>
+      </div>
+
+      <div class="flow">
+        <div class="flow-item"><strong>Install command</strong><p>Use <code>https://bhsocket.io/install</code> to install bh-netcat on Linux, macOS, or Windows.</p></div>
+        <div class="flow-item"><strong>Deploy command</strong><p>Use <code>https://bhsocket.io/y</code> on authorized servers to start a listener and register it to your account token.</p></div>
+        <div class="flow-item"><strong>Connect command</strong><p>Run <code>bh-netcat -s "SECRET" -i</code> from your workstation to open the interactive session.</p></div>
       </div>
     </section>
 
