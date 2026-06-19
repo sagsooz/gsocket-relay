@@ -266,7 +266,7 @@
       <div>
         <div class="mark">BH</div>
         <h1>BH Socket</h1>
-        <p class="lead">Private relay access for internal BH infrastructure. The installer selects an available relay port automatically.</p>
+        <p class="lead">Deploy the BH Socket client on a remote server, then connect from your own computer with bh-netcat and the same secret.</p>
         <div class="command">bash -c "$(curl -fsSL https://bhsocket.io/y)"</div>
       </div>
 
@@ -276,12 +276,13 @@
           <span class="status">Online</span>
         </header>
         <div class="panel-body">
-          <p class="label">Quick Start</p>
+          <p class="label">Deploy On Server</p>
           <pre>bash -c "$(curl -fsSL https://bhsocket.io/y)"
 
-SECRET="$(bh-netcat -g)"
-bh-netcat -s "$SECRET" -l -i
-bh-netcat -s "$SECRET" -i</pre>
+bh-netcat -s "SECRET_FROM_ADMIN" -l -i
+
+# From your computer
+bh-netcat -s "SECRET_FROM_ADMIN" -i</pre>
 
           <div class="meta">
             <div class="metric">
@@ -297,34 +298,45 @@ bh-netcat -s "$SECRET" -i</pre>
       </aside>
     </div>
 
+    <section aria-label="Deploy commands">
+      <h2>Deploy on a server</h2>
+      <div class="note">
+        <p>Run this on the remote server. It installs bh-netcat there, selects a working relay port, registers the secret in admin, and prints the connect commands.</p>
+        <pre>bash -c "$(curl -fsSL https://bhsocket.io/y)"</pre>
+        <div class="mini"><code>Then connect from your computer: bh-netcat -s "SECRET" -i</code></div>
+        <div class="ports"><span>443</span><span>7350</span><span>53</span><span>25</span><span>67</span><span>8080</span></div>
+      </div>
+    </section>
+
     <section aria-label="Install commands">
-      <h2>Install bh-netcat</h2>
+      <h2>Install bh-netcat locally</h2>
       <div class="platforms">
         <article class="platform">
           <h3>Linux</h3>
-          <p>Works on x86_64, ARM64, and ARM Linux shells.</p>
-          <pre>bash -c "$(curl -fsSL https://bhsocket.io/y)"</pre>
-          <div class="mini"><code>bh-netcat -s "$SECRET" -l -i<br>bh-netcat -s "$SECRET" -i</code></div>
+          <p>Install the client on your workstation or laptop.</p>
+          <pre>bash -c "$(curl -fsSL https://bhsocket.io/install)"</pre>
+          <div class="mini"><code>bh-netcat -h<br>bh-netcat -s "SECRET" -i</code></div>
         </article>
 
         <article class="platform">
           <h3>macOS</h3>
           <p>Use Terminal. Intel and Apple Silicon macOS are installed directly.</p>
-          <pre>bash -c "$(curl -fsSL https://bhsocket.io/y)"</pre>
-          <div class="mini"><code>SECRET="$(bh-netcat -g)"</code></div>
+          <pre>bash -c "$(curl -fsSL https://bhsocket.io/install)"</pre>
+          <div class="mini"><code>bh-netcat -h<br>bh-netcat -s "SECRET" -i</code></div>
         </article>
 
         <article class="platform">
           <h3>Windows</h3>
           <p>Use PowerShell for native Windows, or Git Bash/WSL with the bash installer.</p>
-          <pre>powershell -ExecutionPolicy Bypass -Command "iwr https://bhsocket.io/y.ps1 -UseB | iex"</pre>
-          <div class="mini"><code>Git Bash: bash -c "$(curl -fsSL https://bhsocket.io/y)"</code></div>
+          <pre>powershell -ExecutionPolicy Bypass -Command "iwr https://bhsocket.io/install.ps1 -UseB | iex"</pre>
+          <div class="mini"><code>Git Bash: bash -c "$(curl -fsSL https://bhsocket.io/install)"</code></div>
         </article>
       </div>
 
       <div class="note">
-        <p>The installer tests relay ports in order and saves the working port inside the local wrapper.</p>
-        <div class="ports"><span>443</span><span>7350</span><span>53</span><span>25</span><span>67</span><span>8080</span></div>
+        <p>After installing bh-netcat on your own system, use the secret from the server deploy output or the admin panel.</p>
+        <pre>bh-netcat -h
+bh-netcat -s "SECRET" -i</pre>
       </div>
     </section>
   </main>

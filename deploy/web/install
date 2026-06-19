@@ -305,7 +305,7 @@ install_client() {
     say "--> Add ${prefix}/bin to PATH if ${BH_NAME} is not found in a new shell."
   fi
   say ""
-  say "--> To uninstall use BH_UNINSTALL=1 bash -c \"\$(curl -fsSL ${BH_BASE_URL%/}/y)\""
+  say "--> To uninstall use BH_UNINSTALL=1 bash -c \"\$(curl -fsSL ${BH_BASE_URL%/}/install)\""
   say "--> Basic usage:"
   say "--> SECRET=\"\$(${BH_NAME} -g)\""
   say "--> ${BH_NAME} -s \"\$SECRET\" -l -i"
@@ -314,8 +314,8 @@ install_client() {
   say "--> To reuse this generated secret:"
   say "--> ${BH_NAME} -s \"${BH_SECRET}\" -l -i"
   say "--> ${BH_NAME} -s \"${BH_SECRET}\" -i"
-  say "--> S=\"${BH_SECRET}\" bash -c \"\$(curl -fsSL ${BH_BASE_URL%/}/y)\""
-  say "--> S=\"${BH_SECRET}\" bash -c \"\$(wget -qO- ${BH_BASE_URL%/}/y)\""
+  say "--> S=\"${BH_SECRET}\" bash -c \"\$(curl -fsSL ${BH_BASE_URL%/}/install)\""
+  say "--> S=\"${BH_SECRET}\" bash -c \"\$(wget -qO- ${BH_BASE_URL%/}/install)\""
 }
 
 main() {
